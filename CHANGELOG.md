@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.4.3] - 2026-03-10
+
+### Fixed
+- Portainer first-run credential bootstrap now stores admin username and hash in separate files instead of a sourced shell env file
+- Prevented Caddy bcrypt hashes from being corrupted by shell expansion during restart
+
 ## [0.4.2] - 2026-03-10
 
 ### Added

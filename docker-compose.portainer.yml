@@ -18,14 +18,25 @@ services:
         if [ ! -f /state/generated/Caddy.users ]; then
           printf '# Generated routes for user workspaces will be written here by the admin UI.\n' > /state/generated/Caddy.users
         fi
-        if [ -f /state/bootstrap/admin-auth.env ]; then
-          . /state/bootstrap/admin-auth.env
+        if [ -f /state/bootstrap/admin-user-name ]; then
+          STORED_ADMIN_USER_NAME="$$(cat /state/bootstrap/admin-user-name)"
         else
           STORED_ADMIN_USER_NAME=""
+        fi
+        if [ -f /state/bootstrap/admin-password-hash ]; then
+          STORED_ADMIN_USER_PASSWORD_HASH="$$(cat /state/bootstrap/admin-password-hash)"
+        else
           STORED_ADMIN_USER_PASSWORD_HASH=""
+        fi
+        if [ -f /state/bootstrap/admin-password-plain ]; then
+          STORED_ADMIN_USER_PASSWORD="$$(cat /state/bootstrap/admin-password-plain)"
+        else
           STORED_ADMIN_USER_PASSWORD=""
         fi
-        EFFECTIVE_ADMIN_USER_NAME="$${ADMIN_USER_NAME:-$${STORED_ADMIN_USER_NAME:-admin}}"
+        EFFECTIVE_ADMIN_USER_NAME="$${ADMIN_USER_NAME:-admin}"
+        if [ -z "$$EFFECTIVE_ADMIN_USER_NAME" ]; then
+          EFFECTIVE_ADMIN_USER_NAME="$${STORED_ADMIN_USER_NAME:-admin}"
+        fi
         EFFECTIVE_ADMIN_USER_PASSWORD_HASH="$${ADMIN_USER_PASSWORD_HASH:-}"
         if [ -z "$$EFFECTIVE_ADMIN_USER_PASSWORD_HASH" ] || [ "$$EFFECTIVE_ADMIN_USER_PASSWORD_HASH" = "CHANGE_ME" ]; then
           if [ -n "$${STORED_ADMIN_USER_PASSWORD_HASH:-}" ]; then
@@ -34,26 +45,22 @@ services:
           else
             EFFECTIVE_ADMIN_USER_PASSWORD="$$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20)"
             EFFECTIVE_ADMIN_USER_PASSWORD_HASH="$$(caddy hash-password --plaintext "$$EFFECTIVE_ADMIN_USER_PASSWORD")"
-            cat > /state/bootstrap/admin-auth.env <<EOF_AUTH
-STORED_ADMIN_USER_NAME=$$EFFECTIVE_ADMIN_USER_NAME
-STORED_ADMIN_USER_PASSWORD_HASH=$$EFFECTIVE_ADMIN_USER_PASSWORD_HASH
-STORED_ADMIN_USER_PASSWORD=$$EFFECTIVE_ADMIN_USER_PASSWORD
-EOF_AUTH
+            printf '%s' "$$EFFECTIVE_ADMIN_USER_NAME" > /state/bootstrap/admin-user-name
+            printf '%s' "$$EFFECTIVE_ADMIN_USER_PASSWORD_HASH" > /state/bootstrap/admin-password-hash
+            printf '%s' "$$EFFECTIVE_ADMIN_USER_PASSWORD" > /state/bootstrap/admin-password-plain
             echo "=================================================="
             echo "Mobile Web Console Hub initial admin credentials"
             echo "Username: $$EFFECTIVE_ADMIN_USER_NAME"
             echo "Password: $$EFFECTIVE_ADMIN_USER_PASSWORD"
             echo "These credentials were generated on first start."
-            echo "Stored in volume path: /state/bootstrap/admin-auth.env"
+            echo "Stored in volume path: /state/bootstrap/"
             echo "=================================================="
           fi
         else
           EFFECTIVE_ADMIN_USER_PASSWORD="$${STORED_ADMIN_USER_PASSWORD:-}"
-          cat > /state/bootstrap/admin-auth.env <<EOF_AUTH
-STORED_ADMIN_USER_NAME=$$EFFECTIVE_ADMIN_USER_NAME
-STORED_ADMIN_USER_PASSWORD_HASH=$$EFFECTIVE_ADMIN_USER_PASSWORD_HASH
-STORED_ADMIN_USER_PASSWORD=$$EFFECTIVE_ADMIN_USER_PASSWORD
-EOF_AUTH
+          printf '%s' "$$EFFECTIVE_ADMIN_USER_NAME" > /state/bootstrap/admin-user-name
+          printf '%s' "$$EFFECTIVE_ADMIN_USER_PASSWORD_HASH" > /state/bootstrap/admin-password-hash
+          printf '%s' "$$EFFECTIVE_ADMIN_USER_PASSWORD" > /state/bootstrap/admin-password-plain
         fi
         cat <<'EOF' > /etc/caddy/Caddyfile
         HOST_PLACEHOLDER {
