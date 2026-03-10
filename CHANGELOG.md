@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.5.8] - 2026-03-10
+
+### Fixed
+- Added explicit nginx redirects and `^~` route blocks for `/admin`, `/login`, and `/logout` to make admin login routing robust across trailing-slash variants
+
 ## [0.5.7] - 2026-03-10
 
 ### Fixed

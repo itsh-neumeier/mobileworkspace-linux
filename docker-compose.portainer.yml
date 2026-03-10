@@ -37,7 +37,11 @@ services:
               return 200 '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mobile Web Console Hub</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(160deg,#081222 0%,#12213a 100%);color:#f8fafc;font-family:"Segoe UI",sans-serif;padding:24px}main{width:min(720px,100%);padding:32px;border-radius:24px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(14px)}a{display:inline-flex;margin-top:18px;padding:12px 18px;border-radius:999px;background:#7cc4ff;color:#081222;text-decoration:none;font-weight:700}</style></head><body><main><h1>Mobile Web Console Hub</h1><p>This instance is managed through the admin panel. Use the web UI to create terminal or desktop workspaces for your users.</p><a href="/admin/">Open Admin Panel</a></main></body></html>';
             }
 
-            location /admin/ {
+            location = /admin {
+              return 302 /admin/;
+            }
+
+            location ^~ /admin/ {
               set $$admin_upstream http://mobileworkspace-admin-ui:8080;
               proxy_pass $$admin_upstream;
               proxy_http_version 1.1;
@@ -49,7 +53,11 @@ services:
               proxy_set_header Connection "upgrade";
             }
 
-            location /login/ {
+            location = /login {
+              return 302 /login/;
+            }
+
+            location ^~ /login/ {
               set $$admin_upstream http://mobileworkspace-admin-ui:8080;
               proxy_pass $$admin_upstream;
               proxy_http_version 1.1;
@@ -61,7 +69,11 @@ services:
               proxy_set_header Connection "upgrade";
             }
 
-            location /logout/ {
+            location = /logout {
+              return 302 /logout/;
+            }
+
+            location ^~ /logout/ {
               set $$admin_upstream http://mobileworkspace-admin-ui:8080;
               proxy_pass $$admin_upstream;
               proxy_http_version 1.1;
