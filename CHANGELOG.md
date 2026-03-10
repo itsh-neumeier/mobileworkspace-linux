@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.5.12] - 2026-03-10
+
+### Fixed
+- Added startup readiness check so nginx starts only after Gunicorn responds, preventing intermittent `/admin/` smoke-test failures
+
 ## [0.5.11] - 2026-03-10
 
 ### Changed

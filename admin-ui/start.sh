@@ -87,6 +87,22 @@ EOF
 gunicorn --bind 0.0.0.0:8080 --workers 2 --threads 4 app:APP &
 GUNICORN_PID=$!
 
+READY=0
+for i in $(seq 1 60); do
+  if wget -q -O /dev/null http://127.0.0.1:8080/login/; then
+    READY=1
+    break
+  fi
+  sleep 1
+done
+
+if [ "${READY}" -ne 1 ]; then
+  echo "Gunicorn did not become ready in time" >&2
+  kill "${GUNICORN_PID}" 2>/dev/null || true
+  wait "${GUNICORN_PID}" 2>/dev/null || true
+  exit 1
+fi
+
 nginx -g 'daemon off;' &
 NGINX_PID=$!
 
