@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.9] - 2026-03-10
+
+### Added
+- Configurable Proxmox VMID range (`VMID Min` / `VMID Max`) in Admin UI settings
+
+### Fixed
+- Proxmox clone flow now waits for async clone task completion before applying VM config/start
+- Added lock-timeout retries for Proxmox VM config/start/stop/delete actions
+
 ## [0.6.8] - 2026-03-10
 
 ### Added

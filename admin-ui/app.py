@@ -4,6 +4,7 @@ import re
 import secrets
 import ssl
 import subprocess
+import time
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -149,6 +150,8 @@ TRANSLATIONS = {
         "provisioner_mode": "Provisioner Mode",
         "docker_mode": "Docker",
         "proxmox_vm_mode": "Proxmox VM",
+        "vmid_min": "VMID Min",
+        "vmid_max": "VMID Max",
     },
     "de": {
         "product_name": "Mobile Web Console Hub",
@@ -212,6 +215,8 @@ TRANSLATIONS = {
         "provisioner_mode": "Provisioner Modus",
         "docker_mode": "Docker",
         "proxmox_vm_mode": "Proxmox VM",
+        "vmid_min": "VMID Min",
+        "vmid_max": "VMID Max",
     },
 }
 
@@ -439,6 +444,14 @@ PAGE_TEMPLATE = """
                   <div class="col-6">
                     <label class="form-label fw-semibold" for="cfg_template_vmid">{{ tr.proxmox_template_vmid }}</label>
                     <input class="form-control" id="cfg_template_vmid" name="cfg_template_vmid" value="{{ proxmox_cfg.template_vmid }}">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold" for="cfg_vmid_min">{{ tr.vmid_min }}</label>
+                    <input class="form-control" id="cfg_vmid_min" name="cfg_vmid_min" value="{{ proxmox_cfg.vmid_min }}" placeholder="100">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold" for="cfg_vmid_max">{{ tr.vmid_max }}</label>
+                    <input class="form-control" id="cfg_vmid_max" name="cfg_vmid_max" value="{{ proxmox_cfg.vmid_max }}" placeholder="999999">
                   </div>
                   <div class="col-12">
                     <label class="form-label fw-semibold" for="cfg_token_id">{{ tr.proxmox_token_id }}</label>
@@ -1178,6 +1191,8 @@ def proxmox_default_settings() -> dict:
         "vm_start_on_create": PROXMOX_VM_START_ON_CREATE,
         "verify_tls": PROXMOX_VERIFY_TLS,
         "desktop_url_template": PROXMOX_DESKTOP_URL_TEMPLATE,
+        "vmid_min": "",
+        "vmid_max": "",
     }
 
 
@@ -1212,6 +1227,8 @@ def proxmox_settings() -> dict:
     merged["vm_start_on_create"] = str(merged.get("vm_start_on_create", "true")).strip().lower() in {"1", "true", "yes"}
     merged["verify_tls"] = str(merged.get("verify_tls", "true")).strip().lower() in {"1", "true", "yes"}
     merged["desktop_url_template"] = str(merged.get("desktop_url_template", PROXMOX_DESKTOP_URL_TEMPLATE)).strip()
+    merged["vmid_min"] = str(merged.get("vmid_min", "")).strip()
+    merged["vmid_max"] = str(merged.get("vmid_max", "")).strip()
     return merged
 
 
@@ -1271,9 +1288,69 @@ def proxmox_request(method: str, path: str, settings: dict, data: dict | None = 
     return parsed.get("data", {})
 
 
+def proxmox_request_retry(method: str, path: str, settings: dict, data: dict | None = None, attempts: int = 12) -> dict:
+    last_exc: Exception | None = None
+    for _ in range(attempts):
+        try:
+            return proxmox_request(method, path, settings, data)
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            msg = str(exc)
+            if "can't lock file" not in msg and "got timeout" not in msg:
+                raise
+            time.sleep(5)
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("Proxmox request retry failed without explicit error.")
+
+
+def proxmox_wait_task(settings: dict, node: str, upid: str, timeout_seconds: int = 600) -> tuple[bool, str]:
+    start = time.time()
+    while (time.time() - start) < timeout_seconds:
+        data = proxmox_request("GET", f"/nodes/{node}/tasks/{upid}/status", settings)
+        status = str(data.get("status", "")).lower()
+        if status == "stopped":
+            exitstatus = str(data.get("exitstatus", ""))
+            if exitstatus == "OK":
+                return True, "OK"
+            return False, exitstatus or "Task failed"
+        time.sleep(2)
+    return False, "timeout"
+
+
 def proxmox_next_vmid(settings: dict) -> int:
     value = proxmox_request("GET", "/cluster/nextid", settings)
     return int(value)
+
+
+def proxmox_used_vmids(settings: dict) -> set[int]:
+    items = proxmox_request("GET", "/cluster/resources", settings, {"type": "vm"})
+    used: set[int] = set()
+    if isinstance(items, list):
+        for item in items:
+            try:
+                used.add(int(item.get("vmid")))
+            except Exception:
+                continue
+    return used
+
+
+def proxmox_pick_vmid(settings: dict) -> int:
+    min_raw = str(settings.get("vmid_min", "")).strip()
+    max_raw = str(settings.get("vmid_max", "")).strip()
+    if not min_raw and not max_raw:
+        return proxmox_next_vmid(settings)
+
+    vmid_min = parse_int_or_default(min_raw, 100, 1, 999999999, "VMID Min")
+    vmid_max = parse_int_or_default(max_raw, 999999999, 1, 999999999, "VMID Max")
+    if vmid_max < vmid_min:
+        raise ValueError("VMID Max must be greater than or equal to VMID Min.")
+
+    used = proxmox_used_vmids(settings)
+    for candidate in range(vmid_min, vmid_max + 1):
+        if candidate not in used:
+            return candidate
+    raise RuntimeError(f"No free VMID available in range {vmid_min}-{vmid_max}.")
 
 
 def proxmox_vm_access_url(settings: dict, vmid: int, node: str) -> str:
@@ -1299,9 +1376,9 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
     if not ok:
         return False, message
     try:
-        vmid = proxmox_next_vmid(settings)
+        vmid = proxmox_pick_vmid(settings)
         node = settings["node"]
-        proxmox_request(
+        clone_task = proxmox_request(
             "POST",
             f"/nodes/{node}/qemu/{settings['template_vmid']}/clone",
             settings,
@@ -1312,6 +1389,11 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
                 "full": 1,
             },
         )
+        if not clone_task:
+            return False, "Proxmox clone did not return a task identifier."
+        task_ok, task_status = proxmox_wait_task(settings, node, str(clone_task), timeout_seconds=900)
+        if not task_ok:
+            return False, f"Proxmox clone task failed: {task_status}"
         profile = user.get("proxmox_profile", {})
         cores = int(profile.get("cores", settings["vm_cores"]))
         memory_mb = int(profile.get("memory_mb", settings["vm_memory_mb"]))
@@ -1332,14 +1414,14 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
         }
         if disk_override:
             config_payload["scsi0"] = disk_override
-        proxmox_request(
+        proxmox_request_retry(
             "POST",
             f"/nodes/{node}/qemu/{vmid}/config",
             settings,
             config_payload,
         )
         if user.get("enabled", True) and start_on_create:
-            proxmox_request("POST", f"/nodes/{node}/qemu/{vmid}/status/start", settings, {})
+            proxmox_request_retry("POST", f"/nodes/{node}/qemu/{vmid}/status/start", settings, {})
         user["provider"] = "proxmox_vm"
         user["proxmox"] = {
             "vmid": vmid,
@@ -1361,7 +1443,7 @@ def proxmox_vm_action(user: dict, action: str) -> tuple[bool, str]:
     if not vmid:
         return False, "User has no linked Proxmox VM."
     try:
-        proxmox_request("POST", f"/nodes/{node}/qemu/{vmid}/status/{action}", settings, {})
+        proxmox_request_retry("POST", f"/nodes/{node}/qemu/{vmid}/status/{action}", settings, {})
         return True, f"VM {vmid} {action} requested."
     except Exception as exc:
         return False, f"Proxmox action '{action}' failed: {exc}"
@@ -1375,11 +1457,11 @@ def proxmox_delete_vm(user: dict) -> tuple[bool, str]:
     if not vmid:
         return True, "No Proxmox VM linked."
     try:
-        proxmox_request("POST", f"/nodes/{node}/qemu/{vmid}/status/stop", settings, {"timeout": 30})
+        proxmox_request_retry("POST", f"/nodes/{node}/qemu/{vmid}/status/stop", settings, {"timeout": 30})
     except Exception:
         pass
     try:
-        proxmox_request("DELETE", f"/nodes/{node}/qemu/{vmid}", settings, {"purge": 1, "destroy-unreferenced-disks": 1})
+        proxmox_request_retry("DELETE", f"/nodes/{node}/qemu/{vmid}", settings, {"purge": 1, "destroy-unreferenced-disks": 1})
         return True, f"VM {vmid} deleted."
     except Exception as exc:
         return False, f"Proxmox VM delete failed: {exc}"
@@ -1580,9 +1662,16 @@ def save_proxmox_settings_route():
         cfg["api_url"] = request.form.get("cfg_api_url", "").strip().rstrip("/")
         cfg["node"] = request.form.get("cfg_node", "").strip()
         cfg["template_vmid"] = request.form.get("cfg_template_vmid", "").strip()
+        cfg["vmid_min"] = request.form.get("cfg_vmid_min", "").strip()
+        cfg["vmid_max"] = request.form.get("cfg_vmid_max", "").strip()
         cfg["token_id"] = request.form.get("cfg_token_id", "").strip()
         cfg["token_secret"] = request.form.get("cfg_token_secret", "").strip()
         cfg["verify_tls"] = request.form.get("cfg_verify_tls") == "1"
+        if cfg["vmid_min"] or cfg["vmid_max"]:
+            vmid_min = parse_int_or_default(cfg["vmid_min"] or "1", 1, 1, 999999999, "VMID Min")
+            vmid_max = parse_int_or_default(cfg["vmid_max"] or "999999999", 999999999, 1, 999999999, "VMID Max")
+            if vmid_max < vmid_min:
+                return redirect_with_message("VMID Max must be greater than or equal to VMID Min.", error=True)
         save_proxmox_settings(cfg)
     except Exception as exc:
         return redirect_with_message(f"Saving Proxmox settings failed: {trim_output(str(exc))}", error=True)

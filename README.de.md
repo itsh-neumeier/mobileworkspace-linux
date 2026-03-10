@@ -184,8 +184,10 @@ Wenn Mobile Web Console Hub Desktop-Umgebungen als echte Proxmox-VMs (statt Dock
 Im Proxmox-VM-Modus bietet die Admin-WebUI zusätzlich:
 
 - Proxmox-Backend-Einstellungen (API URL, Node, Token, Template-VMID, TLS-Prüfung)
+- VMID-Range-Steuerung (z. B. `8001` bis `8999`)
 - VM-Overrides pro Benutzer (vCPU, RAM, Bridge, Disk, Auto-Start)
 - einen integrierten `Proxmox API testen`-Button für einen End-to-End-API-Check
+- VM-Löschen direkt über die Workspace-Aktionen (führt echtes Proxmox-Delete aus)
 
 Wenn du eine fertige Debian-13-Cloud-Init-Template-VM in Proxmox brauchst, nutze:
 

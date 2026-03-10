@@ -184,8 +184,10 @@ If you want Mobile Web Console Hub to create desktop environments as real Proxmo
 In Proxmox VM mode, the admin UI also provides:
 
 - backend Proxmox settings (API URL, node, token, template VMID, TLS verification)
+- VMID range control (for example `8001` to `8999`)
 - per-user VM overrides (vCPU, RAM, bridge, disk, auto-start)
 - a built-in `Test Proxmox API` button for an end-to-end API check
+- VM delete from the workspace action buttons (executes Proxmox VM deletion)
 
 If you need a ready Debian 13 cloud-init template VM on Proxmox, use:
 
