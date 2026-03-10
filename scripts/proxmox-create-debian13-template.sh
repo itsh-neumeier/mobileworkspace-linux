@@ -266,7 +266,9 @@ customize_image_for_desktop() {
   ensure_virt_customize
   echo "Customizing image with desktop profile '${DESKTOP_PROFILE}' (this can take several minutes)..."
   virt-customize -a "${IMG_PATH}" \
-    --run-command "export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y xfce4 xfce4-goodies lightdm xorg dbus-x11 xrdp xorgxrdp; apt-get clean" \
+    --run-command "printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d; chmod +x /usr/sbin/policy-rc.d" \
+    --run-command "export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y --no-install-recommends xfce4 lightdm xorg dbus-x11 xrdp xorgxrdp; apt-get clean; rm -rf /var/lib/apt/lists/*" \
+    --run-command "rm -f /usr/sbin/policy-rc.d" \
     --run-command "mkdir -p /etc/systemd/system/graphical.target.wants /etc/systemd/system/multi-user.target.wants /etc/skel" \
     --run-command "ln -sf /lib/systemd/system/graphical.target /etc/systemd/system/default.target" \
     --run-command "ln -sf /lib/systemd/system/lightdm.service /etc/systemd/system/graphical.target.wants/lightdm.service" \

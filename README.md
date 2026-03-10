@@ -201,11 +201,19 @@ Directly from GitHub on a Proxmox host:
 curl -fsSL https://raw.githubusercontent.com/itsh-neumeier/mobileworkspace-linux/main/scripts/proxmox-create-debian13-template.sh | sh -s -- --vmid 9000 --name debian13-cloud-template
 ```
 
+Example with custom storage IDs:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/itsh-neumeier/mobileworkspace-linux/main/scripts/proxmox-create-debian13-template.sh | sh -s -- --vmid 9000 --name debian13-cloud-template --storage nvme-storage --ci-storage nvme-storage
+```
+
 Guided TUI wizard mode:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/itsh-neumeier/mobileworkspace-linux/main/scripts/proxmox-create-debian13-template.sh | sh -s -- --tui
 ```
+
+Note: During desktop customization, `virt-customize` can show warnings like random-seed messages. This is expected for cloud images. The desktop package step can take several minutes.
 
 ## Optional External Proxy
 

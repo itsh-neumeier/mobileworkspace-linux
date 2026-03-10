@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.13] - 2026-03-10
+
+### Fixed
+- Proxmox template desktop customization now uses safer noninteractive install settings (`policy-rc.d`, `--no-install-recommends`) to reduce hangs during `virt-customize`
+- Added explicit README examples for custom `--storage` / `--ci-storage` usage and guidance about expected `virt-customize` warnings
+
 ## [0.6.12] - 2026-03-10
 
 ### Fixed
