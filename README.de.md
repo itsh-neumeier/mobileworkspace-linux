@@ -19,6 +19,7 @@ Das Projekt ist für Situationen gedacht, in denen du mit verwalteten Notebooks 
 - Admin-WebUI für Benutzerverwaltung
 - Benutzeranlage direkt im Browser
 - Automatische Bereitstellung der Container pro Benutzer
+- Optionale Proxmox-VM-Bereitstellung pro Benutzer für Desktop-Workspaces
 - Terminal-Workspaces mit `code-server`
 - Desktop-Workspaces mit `webtop` über WebVNC
 - Automatische nginx-Routen pro Benutzer
@@ -119,6 +120,12 @@ Empfohlene Portainer-Umgebungsvariablen:
 - `MWC_EDGE_NETWORK`
 - `MWC_PUBLIC_NETWORK`
 - `MWC_INTERNAL_NETWORK`
+- `MWC_PROVISIONER_MODE`
+- `MWC_PROXMOX_API_URL` (für Proxmox-VM-Modus)
+- `MWC_PROXMOX_NODE` (für Proxmox-VM-Modus)
+- `MWC_PROXMOX_TOKEN_ID` (für Proxmox-VM-Modus)
+- `MWC_PROXMOX_TOKEN_SECRET` (für Proxmox-VM-Modus)
+- `MWC_PROXMOX_TEMPLATE_VMID` (für Proxmox-VM-Modus)
 
 Verhalten des Portainer-Stacks:
 
@@ -171,6 +178,26 @@ Das Projekt ist für den Betrieb auf Proxmox vorgesehen. Das empfohlene Deployme
 Das ist robuster als Docker in einem LXC-Container, besonders wenn Benutzer dynamisch erzeugt und Desktop-Container bereitgestellt werden sollen.
 
 Detaillierte Anleitung: `docs/proxmox.md`
+
+### Proxmox-VM-Modus
+
+Wenn Mobile Web Console Hub Desktop-Umgebungen als echte Proxmox-VMs (statt Docker-webtop-Containern) anlegen soll, setze:
+
+- `MWC_PROVISIONER_MODE=proxmox_vm`
+- `MWC_PROXMOX_API_URL=https://DEIN-PROXMOX:8006`
+- `MWC_PROXMOX_NODE=DEIN_NODE`
+- `MWC_PROXMOX_TOKEN_ID=root@pam!mobileworkspace`
+- `MWC_PROXMOX_TOKEN_SECRET=DEIN_TOKEN_SECRET`
+- `MWC_PROXMOX_TEMPLATE_VMID=9000`
+
+Optionale Ressourcen- und Netzwerk-Parameter:
+
+- `MWC_PROXMOX_VM_CORES`
+- `MWC_PROXMOX_VM_MEMORY_MB`
+- `MWC_PROXMOX_VM_DISK`
+- `MWC_PROXMOX_NET_BRIDGE`
+- `MWC_PROXMOX_VM_START_ON_CREATE`
+- `MWC_PROXMOX_VERIFY_TLS`
 
 ## Optionaler Externer Proxy
 

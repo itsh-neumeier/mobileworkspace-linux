@@ -2,15 +2,26 @@ import json
 import os
 import re
 import secrets
+import ssl
 import subprocess
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from urllib.parse import urlencode
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from flask import Flask, redirect, render_template_string, request, session, url_for
 from passlib.apache import HtpasswdFile
 from passlib.hash import bcrypt as passlib_bcrypt
+
+
+def env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, str(default)).strip()
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
 PROJECT_ROOT = Path(os.environ.get("MWC_PROJECT_ROOT", "/workspace"))
@@ -39,6 +50,22 @@ ADMIN_PLAIN_FILE = Path(os.environ.get("MWC_ADMIN_PLAIN_FILE", PROJECT_ROOT / "b
 ADMIN_FORCE_CHANGE_FILE = Path(os.environ.get("MWC_ADMIN_FORCE_CHANGE_FILE", PROJECT_ROOT / "bootstrap" / "admin-force-change"))
 ADMIN_INITIAL_PASSWORD = os.environ.get("ADMIN_INITIAL_PASSWORD", "admin")
 SESSION_SECRET_FILE = Path(os.environ.get("MWC_SESSION_SECRET_FILE", PROJECT_ROOT / "bootstrap" / "session-secret"))
+PROVISIONER_MODE = os.environ.get("MWC_PROVISIONER_MODE", "docker").strip().lower()
+PROXMOX_API_URL = os.environ.get("MWC_PROXMOX_API_URL", "").strip().rstrip("/")
+PROXMOX_NODE = os.environ.get("MWC_PROXMOX_NODE", "").strip()
+PROXMOX_TOKEN_ID = os.environ.get("MWC_PROXMOX_TOKEN_ID", "").strip()
+PROXMOX_TOKEN_SECRET = os.environ.get("MWC_PROXMOX_TOKEN_SECRET", "").strip()
+PROXMOX_TEMPLATE_VMID = os.environ.get("MWC_PROXMOX_TEMPLATE_VMID", "").strip()
+PROXMOX_VM_CORES = env_int("MWC_PROXMOX_VM_CORES", 2)
+PROXMOX_VM_MEMORY_MB = env_int("MWC_PROXMOX_VM_MEMORY_MB", 4096)
+PROXMOX_VM_DISK = os.environ.get("MWC_PROXMOX_VM_DISK", "").strip()
+PROXMOX_NET_BRIDGE = os.environ.get("MWC_PROXMOX_NET_BRIDGE", "vmbr0").strip()
+PROXMOX_VM_START_ON_CREATE = os.environ.get("MWC_PROXMOX_VM_START_ON_CREATE", "true").strip().lower() in {"1", "true", "yes"}
+PROXMOX_VERIFY_TLS = os.environ.get("MWC_PROXMOX_VERIFY_TLS", "true").strip().lower() in {"1", "true", "yes"}
+PROXMOX_DESKTOP_URL_TEMPLATE = os.environ.get(
+    "MWC_PROXMOX_DESKTOP_URL_TEMPLATE",
+    "{api_url}/?console=kvm&novnc=1&node={node}&vmid={vmid}",
+).strip()
 
 APP = Flask(__name__)
 SUPPORTED_LANGS = ("en", "de")
@@ -397,12 +424,21 @@ PAGE_TEMPLATE = """
                         <span class="soft-badge {{ 'status-active' if user.enabled else 'status-disabled' }}">{{ 'active' if user.enabled else 'disabled' }}</span>
                       </div>
                       <div class="text-body-secondary small mb-3">{{ tr.created }} {{ user.created_at }}</div>
+                      {% if user.provider == 'proxmox_vm' %}
+                      <div class="soft-badge mb-3 d-inline-flex align-items-center">
+                        <i class="bi bi-pc-display me-2"></i>VM {{ user.proxmox.vmid }} @ {{ user.proxmox.node }}
+                      </div>
+                      <div class="url-pill px-3 py-2 d-inline-flex align-items-center">
+                        <i class="bi bi-link-45deg me-2"></i>{{ user.proxmox.access_url }}
+                      </div>
+                      {% else %}
                       <div class="soft-badge mb-3 d-inline-flex align-items-center">
                         <i class="bi bi-box-seam-fill me-2"></i>{{ user.container_name }}
                       </div>
                       <div class="url-pill px-3 py-2 d-inline-flex align-items-center">
                         <i class="bi bi-link-45deg me-2"></i>http://{{ domain }}{{ user.route_path }}
                       </div>
+                      {% endif %}
                     </div>
                     <div class="d-flex flex-wrap align-items-start justify-content-lg-end gap-2">
                       {% if user.enabled %}
@@ -921,8 +957,143 @@ def reload_proxy() -> tuple[bool, str]:
 
 
 def provision(users) -> tuple[bool, str]:
+    if PROVISIONER_MODE == "proxmox_vm":
+        return True, "Proxmox VM mode active."
     write_generated_files(users)
     return deploy_stack(users)
+
+
+def proxmox_enabled() -> bool:
+    return PROVISIONER_MODE == "proxmox_vm"
+
+
+def proxmox_ready() -> tuple[bool, str]:
+    required = {
+        "MWC_PROXMOX_API_URL": PROXMOX_API_URL,
+        "MWC_PROXMOX_NODE": PROXMOX_NODE,
+        "MWC_PROXMOX_TOKEN_ID": PROXMOX_TOKEN_ID,
+        "MWC_PROXMOX_TOKEN_SECRET": PROXMOX_TOKEN_SECRET,
+        "MWC_PROXMOX_TEMPLATE_VMID": PROXMOX_TEMPLATE_VMID,
+    }
+    missing = [key for key, value in required.items() if not value]
+    if missing:
+        return False, f"Missing Proxmox configuration: {', '.join(missing)}"
+    return True, ""
+
+
+def proxmox_headers() -> dict:
+    return {
+        "Authorization": f"PVEAPIToken={PROXMOX_TOKEN_ID}={PROXMOX_TOKEN_SECRET}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+
+
+def proxmox_request(method: str, path: str, data: dict | None = None) -> dict:
+    payload = None
+    if data is not None:
+        payload = urlencode(data).encode("utf-8")
+    req = Request(
+        url=f"{PROXMOX_API_URL}/api2/json{path}",
+        data=payload,
+        method=method,
+        headers=proxmox_headers(),
+    )
+    context = ssl.create_default_context()
+    if not PROXMOX_VERIFY_TLS:
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+    try:
+        with urlopen(req, timeout=30, context=context) as response:
+            body = response.read().decode("utf-8")
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code} for {path}: {detail}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"Connection failed for {path}: {exc.reason}") from exc
+    parsed = json.loads(body)
+    return parsed.get("data", {})
+
+
+def proxmox_next_vmid() -> int:
+    value = proxmox_request("GET", "/cluster/nextid")
+    return int(value)
+
+
+def proxmox_vm_access_url(vmid: int) -> str:
+    return PROXMOX_DESKTOP_URL_TEMPLATE.format(api_url=PROXMOX_API_URL, node=PROXMOX_NODE, vmid=vmid)
+
+
+def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
+    ok, message = proxmox_ready()
+    if not ok:
+        return False, message
+    try:
+        vmid = proxmox_next_vmid()
+        proxmox_request(
+            "POST",
+            f"/nodes/{PROXMOX_NODE}/qemu/{PROXMOX_TEMPLATE_VMID}/clone",
+            {
+                "newid": vmid,
+                "name": f"mwc-{user['route']}",
+                "target": PROXMOX_NODE,
+                "full": 1,
+            },
+        )
+        config_payload = {
+            "cores": PROXMOX_VM_CORES,
+            "memory": PROXMOX_VM_MEMORY_MB,
+            "net0": f"virtio,bridge={PROXMOX_NET_BRIDGE}",
+            "tags": "mobileworkspace",
+        }
+        if PROXMOX_VM_DISK:
+            config_payload["scsi0"] = PROXMOX_VM_DISK
+        proxmox_request(
+            "POST",
+            f"/nodes/{PROXMOX_NODE}/qemu/{vmid}/config",
+            config_payload,
+        )
+        if user.get("enabled", True) and PROXMOX_VM_START_ON_CREATE:
+            proxmox_request("POST", f"/nodes/{PROXMOX_NODE}/qemu/{vmid}/status/start", {})
+        user["provider"] = "proxmox_vm"
+        user["proxmox"] = {
+            "vmid": vmid,
+            "node": PROXMOX_NODE,
+            "name": f"mwc-{user['route']}",
+            "access_url": proxmox_vm_access_url(vmid),
+        }
+        return True, f"Proxmox VM {vmid} created."
+    except Exception as exc:
+        return False, f"Proxmox VM creation failed: {exc}"
+
+
+def proxmox_vm_action(user: dict, action: str) -> tuple[bool, str]:
+    info = user.get("proxmox", {})
+    vmid = info.get("vmid")
+    node = info.get("node") or PROXMOX_NODE
+    if not vmid:
+        return False, "User has no linked Proxmox VM."
+    try:
+        proxmox_request("POST", f"/nodes/{node}/qemu/{vmid}/status/{action}", {})
+        return True, f"VM {vmid} {action} requested."
+    except Exception as exc:
+        return False, f"Proxmox action '{action}' failed: {exc}"
+
+
+def proxmox_delete_vm(user: dict) -> tuple[bool, str]:
+    info = user.get("proxmox", {})
+    vmid = info.get("vmid")
+    node = info.get("node") or PROXMOX_NODE
+    if not vmid:
+        return True, "No Proxmox VM linked."
+    try:
+        proxmox_request("POST", f"/nodes/{node}/qemu/{vmid}/status/stop", {"timeout": 30})
+    except Exception:
+        pass
+    try:
+        proxmox_request("DELETE", f"/nodes/{node}/qemu/{vmid}", {"purge": 1, "destroy-unreferenced-disks": 1})
+        return True, f"VM {vmid} deleted."
+    except Exception as exc:
+        return False, f"Proxmox VM delete failed: {exc}"
 
 
 def password_hash(plaintext: str) -> str:
@@ -1083,6 +1254,8 @@ def create_user():
         return redirect_with_message(f"Route '{route}' already exists.", error=True)
     if not password:
         return redirect_with_message("User password is required.", error=True)
+    if proxmox_enabled() and workspace_type != "desktop":
+        return redirect_with_message("In Proxmox VM mode only desktop workspaces are supported.", error=True)
 
     user = {
         "id": make_id(route, workspace_type),
@@ -1094,11 +1267,20 @@ def create_user():
         "password": password,
         "password_hash": password_hash(password),
         "enabled": True,
+        "provider": "proxmox_vm" if proxmox_enabled() else "docker",
         "service_name": make_id(route, workspace_type),
         "container_name": f"mwc-{make_id(route, workspace_type)}",
         "volumes": build_volume_map(route, workspace_type),
         "created_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
     }
+    if proxmox_enabled():
+        ok, output = proxmox_create_vm_for_user(user)
+        if not ok:
+            return redirect_with_message(trim_output(output), error=True)
+        users.append(user)
+        save_users(users)
+        return redirect_with_message(f"Workspace '{username}' created as Proxmox VM.")
+
     users.append(user)
     save_users(users)
     ok, output = provision(users)
@@ -1122,6 +1304,12 @@ def toggle_user(user_id: str, action: str):
         return redirect_with_message("Unsupported action.", error=True)
     user["enabled"] = action == "enable"
     save_users(users)
+    if user.get("provider") == "proxmox_vm":
+        vm_action = "start" if user["enabled"] else "stop"
+        ok, output = proxmox_vm_action(user, vm_action)
+        if not ok:
+            return redirect_with_message(trim_output(output), error=True)
+        return redirect_with_message(f"Workspace '{user['username']}' {action}d.")
     ok, output = provision(users)
     if not ok:
         return redirect_with_message(f"State updated, but deploy failed: {trim_output(output)}", error=True)
@@ -1135,6 +1323,12 @@ def redeploy_user(user_id: str):
     user = find_user(users, user_id)
     if not user:
         return redirect_with_message("User not found.", error=True)
+    if user.get("provider") == "proxmox_vm":
+        ok_stop, out_stop = proxmox_vm_action(user, "stop")
+        ok_start, out_start = proxmox_vm_action(user, "start")
+        if not ok_stop and not ok_start:
+            return redirect_with_message(f"Redeploy failed: {trim_output(out_stop)}", error=True)
+        return redirect_with_message(f"Workspace '{user['username']}' VM restarted.")
     ok, output = provision(users)
     if not ok:
         return redirect_with_message(f"Redeploy failed: {trim_output(output)}", error=True)
@@ -1149,6 +1343,12 @@ def delete_user(user_id: str):
     if not user:
         return redirect_with_message("User not found.", error=True)
     remaining = [item for item in users if item["id"] != user_id]
+    if user.get("provider") == "proxmox_vm":
+        ok, output = proxmox_delete_vm(user)
+        if not ok:
+            return redirect_with_message(trim_output(output), error=True)
+        save_users(remaining)
+        return redirect_with_message(f"Workspace '{user['username']}' deleted.")
     save_users(remaining)
     ok, output = provision(remaining)
     if not ok:

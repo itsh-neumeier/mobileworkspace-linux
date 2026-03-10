@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.0] - 2026-03-10
+
+### Added
+- Optional `proxmox_vm` provisioner mode to create desktop workspaces as Proxmox VMs via API (clone/config/start)
+- Proxmox VM lifecycle actions from the admin UI (start/stop/restart/delete)
+- New Proxmox environment variables in Compose and `.env.example`
+
+### Changed
+- Workspace cards now display Proxmox VM details and access URL when a user is provisioned as `proxmox_vm`
+
 ## [0.5.13] - 2026-03-10
 
 ### Fixed

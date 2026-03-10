@@ -19,6 +19,7 @@ The project is designed for situations where you work from managed notebooks or 
 - Admin web UI for user management
 - User creation directly from the browser
 - Automatic provisioning of per-user Docker containers
+- Optional per-user Proxmox VM provisioning for desktop workspaces
 - Terminal workspaces with `code-server`
 - Desktop workspaces with `webtop` over WebVNC
 - Per-user route generation in nginx
@@ -119,6 +120,12 @@ Recommended Portainer environment variables:
 - `MWC_EDGE_NETWORK`
 - `MWC_PUBLIC_NETWORK`
 - `MWC_INTERNAL_NETWORK`
+- `MWC_PROVISIONER_MODE`
+- `MWC_PROXMOX_API_URL` (for Proxmox VM mode)
+- `MWC_PROXMOX_NODE` (for Proxmox VM mode)
+- `MWC_PROXMOX_TOKEN_ID` (for Proxmox VM mode)
+- `MWC_PROXMOX_TOKEN_SECRET` (for Proxmox VM mode)
+- `MWC_PROXMOX_TEMPLATE_VMID` (for Proxmox VM mode)
 
 Portainer stack behavior:
 
@@ -171,6 +178,26 @@ This project is intended to run on Proxmox. The recommended deployment model is:
 That model is more reliable than running Docker inside an LXC container, especially when you want dynamic user provisioning and desktop containers.
 
 Detailed guidance: `docs/proxmox.md`
+
+### Proxmox VM Mode
+
+If you want Mobile Web Console Hub to create desktop environments as real Proxmox VMs (instead of Docker webtop containers), set:
+
+- `MWC_PROVISIONER_MODE=proxmox_vm`
+- `MWC_PROXMOX_API_URL=https://YOUR-PROXMOX:8006`
+- `MWC_PROXMOX_NODE=YOUR_NODE`
+- `MWC_PROXMOX_TOKEN_ID=root@pam!mobileworkspace`
+- `MWC_PROXMOX_TOKEN_SECRET=YOUR_TOKEN_SECRET`
+- `MWC_PROXMOX_TEMPLATE_VMID=9000`
+
+Optional sizing and network controls:
+
+- `MWC_PROXMOX_VM_CORES`
+- `MWC_PROXMOX_VM_MEMORY_MB`
+- `MWC_PROXMOX_VM_DISK`
+- `MWC_PROXMOX_NET_BRIDGE`
+- `MWC_PROXMOX_VM_START_ON_CREATE`
+- `MWC_PROXMOX_VERIFY_TLS`
 
 ## Optional External Proxy
 
