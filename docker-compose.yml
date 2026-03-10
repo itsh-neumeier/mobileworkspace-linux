@@ -30,6 +30,7 @@ services:
       MWC_PROXMOX_NET_BRIDGE: ${MWC_PROXMOX_NET_BRIDGE:-vmbr0}
       MWC_PROXMOX_VM_START_ON_CREATE: ${MWC_PROXMOX_VM_START_ON_CREATE:-true}
       MWC_PROXMOX_VERIFY_TLS: ${MWC_PROXMOX_VERIFY_TLS:-true}
+      MWC_PROXMOX_DESKTOP_URL_TEMPLATE: ${MWC_PROXMOX_DESKTOP_URL_TEMPLATE:-{api_url}/?console=kvm&novnc=1&node={node}&vmid={vmid}}
       MWC_PROXY_CONTAINER_NAME: mobileworkspace-admin-ui
       ADMIN_USER_NAME: ${ADMIN_USER_NAME:-admin}
       MWC_ADMIN_FORCE_CHANGE_FILE: /workspace/bootstrap/admin-force-change

@@ -24,6 +24,19 @@ def env_int(name: str, default: int) -> int:
         return default
 
 
+def parse_int_or_default(raw: str, default: int, minimum: int, maximum: int, field_name: str) -> int:
+    text = (raw or "").strip()
+    if not text:
+        return default
+    try:
+        value = int(text)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a number.") from exc
+    if value < minimum or value > maximum:
+        raise ValueError(f"{field_name} must be between {minimum} and {maximum}.")
+    return value
+
+
 PROJECT_ROOT = Path(os.environ.get("MWC_PROJECT_ROOT", "/workspace"))
 USERS_FILE = Path(os.environ.get("MWC_USERS_FILE", PROJECT_ROOT / "users" / "users.json"))
 GENERATED_COMPOSE = Path(
@@ -112,6 +125,14 @@ TRANSLATIONS = {
         "confirm_new_password": "Confirm new password",
         "update_password": "Update Password",
         "language": "Language",
+        "proxmox_api_test": "Test Proxmox API",
+        "proxmox_vm_settings": "Proxmox VM Settings",
+        "vm_cores": "vCPU Cores",
+        "vm_memory_mb": "Memory (MB)",
+        "vm_bridge": "Network Bridge",
+        "vm_disk": "Disk Override",
+        "vm_disk_help": "Optional Proxmox disk config value (for example local-lvm:32).",
+        "vm_start_on_create": "Start VM after create",
     },
     "de": {
         "product_name": "Mobile Web Console Hub",
@@ -153,6 +174,14 @@ TRANSLATIONS = {
         "confirm_new_password": "Neues Passwort bestätigen",
         "update_password": "Passwort aktualisieren",
         "language": "Sprache",
+        "proxmox_api_test": "Proxmox API testen",
+        "proxmox_vm_settings": "Proxmox VM Einstellungen",
+        "vm_cores": "vCPU Kerne",
+        "vm_memory_mb": "RAM (MB)",
+        "vm_bridge": "Netzwerk-Bridge",
+        "vm_disk": "Disk Override",
+        "vm_disk_help": "Optionaler Proxmox-Disk-Wert (z. B. local-lvm:32).",
+        "vm_start_on_create": "VM nach Erstellung starten",
     },
 }
 
@@ -358,6 +387,18 @@ PAGE_TEMPLATE = """
             {% if flash %}
             <div class="alert {{ 'alert-danger' if flash_error else 'alert-success' }} rounded-4" role="alert">{{ flash }}</div>
             {% endif %}
+            {% if proxmox_mode %}
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+              <span class="soft-badge {{ 'status-active' if proxmox_ready_ok else 'status-disabled' }}">
+                <i class="bi bi-hdd-network me-2"></i>{{ 'Proxmox API ready' if proxmox_ready_ok else proxmox_ready_message }}
+              </span>
+              <form method="post" action="{{ url_for('proxmox_test') }}">
+                <button class="btn btn-outline-secondary btn-sm" type="submit">
+                  <i class="bi bi-plug me-2"></i>{{ tr.proxmox_api_test }}
+                </button>
+              </form>
+            </div>
+            {% endif %}
             <form method="post" action="{{ url_for('create_user') }}">
               <div class="mb-3">
                 <label class="form-label fw-semibold" for="username">{{ tr.username }}</label>
@@ -391,6 +432,35 @@ PAGE_TEMPLATE = """
                 <input class="form-control" id="password" name="password" type="password" required>
                 <div class="form-text">{{ tr.workspace_password_help }}</div>
               </div>
+
+              {% if proxmox_mode %}
+              <div class="border rounded-4 p-3 mb-4">
+                <div class="fw-semibold mb-3">{{ tr.proxmox_vm_settings }}</div>
+                <div class="row g-3">
+                  <div class="col-6">
+                    <label class="form-label fw-semibold" for="proxmox_cores">{{ tr.vm_cores }}</label>
+                    <input class="form-control" id="proxmox_cores" name="proxmox_cores" type="number" min="1" max="32" value="{{ proxmox_default_cores }}">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold" for="proxmox_memory_mb">{{ tr.vm_memory_mb }}</label>
+                    <input class="form-control" id="proxmox_memory_mb" name="proxmox_memory_mb" type="number" min="1024" max="262144" value="{{ proxmox_default_memory_mb }}">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold" for="proxmox_bridge">{{ tr.vm_bridge }}</label>
+                    <input class="form-control" id="proxmox_bridge" name="proxmox_bridge" value="{{ proxmox_default_bridge }}">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold" for="proxmox_disk">{{ tr.vm_disk }}</label>
+                    <input class="form-control" id="proxmox_disk" name="proxmox_disk" value="{{ proxmox_default_disk }}">
+                    <div class="form-text">{{ tr.vm_disk_help }}</div>
+                  </div>
+                </div>
+                <div class="form-check mt-3">
+                  <input class="form-check-input" type="checkbox" value="1" id="proxmox_start_on_create" name="proxmox_start_on_create" {{ 'checked' if proxmox_default_start_on_create else '' }}>
+                  <label class="form-check-label" for="proxmox_start_on_create">{{ tr.vm_start_on_create }}</label>
+                </div>
+              </div>
+              {% endif %}
 
               <button class="btn btn-primary w-100 py-3 fw-semibold" type="submit">
                 <i class="bi bi-rocket-takeoff-fill me-2"></i>{{ tr.create_user_workspace }}
@@ -428,6 +498,11 @@ PAGE_TEMPLATE = """
                       <div class="soft-badge mb-3 d-inline-flex align-items-center">
                         <i class="bi bi-pc-display me-2"></i>VM {{ user.proxmox.vmid }} @ {{ user.proxmox.node }}
                       </div>
+                      {% if user.proxmox_profile %}
+                      <div class="soft-badge mb-3 d-inline-flex align-items-center">
+                        <i class="bi bi-cpu me-2"></i>{{ user.proxmox_profile.cores }} vCPU · {{ user.proxmox_profile.memory_mb }} MB · {{ user.proxmox_profile.bridge }}
+                      </div>
+                      {% endif %}
                       <div class="url-pill px-3 py-2 d-inline-flex align-items-center">
                         <i class="bi bi-link-45deg me-2"></i>{{ user.proxmox.access_url }}
                       </div>
@@ -1023,6 +1098,18 @@ def proxmox_vm_access_url(vmid: int) -> str:
     return PROXMOX_DESKTOP_URL_TEMPLATE.format(api_url=PROXMOX_API_URL, node=PROXMOX_NODE, vmid=vmid)
 
 
+def proxmox_health_check() -> tuple[bool, str]:
+    ok, message = proxmox_ready()
+    if not ok:
+        return False, message
+    try:
+        next_id = proxmox_next_vmid()
+        proxmox_request("GET", f"/nodes/{PROXMOX_NODE}/qemu/{PROXMOX_TEMPLATE_VMID}/status/current")
+        return True, f"Proxmox API reachable (next VMID {next_id}, template {PROXMOX_TEMPLATE_VMID} accessible)."
+    except Exception as exc:
+        return False, f"Proxmox API test failed: {exc}"
+
+
 def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
     ok, message = proxmox_ready()
     if not ok:
@@ -1039,20 +1126,27 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
                 "full": 1,
             },
         )
+        profile = user.get("proxmox_profile", {})
+        cores = int(profile.get("cores", PROXMOX_VM_CORES))
+        memory_mb = int(profile.get("memory_mb", PROXMOX_VM_MEMORY_MB))
+        bridge = profile.get("bridge", PROXMOX_NET_BRIDGE)
+        disk_override = profile.get("disk", PROXMOX_VM_DISK)
+        start_on_create = bool(profile.get("start_on_create", PROXMOX_VM_START_ON_CREATE))
+
         config_payload = {
-            "cores": PROXMOX_VM_CORES,
-            "memory": PROXMOX_VM_MEMORY_MB,
-            "net0": f"virtio,bridge={PROXMOX_NET_BRIDGE}",
+            "cores": cores,
+            "memory": memory_mb,
+            "net0": f"virtio,bridge={bridge}",
             "tags": "mobileworkspace",
         }
-        if PROXMOX_VM_DISK:
-            config_payload["scsi0"] = PROXMOX_VM_DISK
+        if disk_override:
+            config_payload["scsi0"] = disk_override
         proxmox_request(
             "POST",
             f"/nodes/{PROXMOX_NODE}/qemu/{vmid}/config",
             config_payload,
         )
-        if user.get("enabled", True) and PROXMOX_VM_START_ON_CREATE:
+        if user.get("enabled", True) and start_on_create:
             proxmox_request("POST", f"/nodes/{PROXMOX_NODE}/qemu/{vmid}/status/start", {})
         user["provider"] = "proxmox_vm"
         user["proxmox"] = {
@@ -1214,6 +1308,7 @@ def index():
     tr = TRANSLATIONS[lang]
     users = load_users()
     flash_data = current_flash()
+    ready_ok, ready_message = proxmox_health_check() if proxmox_enabled() else (False, "")
     return render_template_string(
         PAGE_TEMPLATE,
         users=users,
@@ -1226,9 +1321,26 @@ def index():
         company_name=COMPANY_NAME,
         company_url=COMPANY_URL,
         admin_username=session.get("admin_username", "admin"),
+        proxmox_mode=proxmox_enabled(),
+        proxmox_ready_ok=ready_ok,
+        proxmox_ready_message=ready_message,
+        proxmox_default_cores=PROXMOX_VM_CORES,
+        proxmox_default_memory_mb=PROXMOX_VM_MEMORY_MB,
+        proxmox_default_bridge=PROXMOX_NET_BRIDGE,
+        proxmox_default_disk=PROXMOX_VM_DISK,
+        proxmox_default_start_on_create=PROXMOX_VM_START_ON_CREATE,
         copyright_year=datetime.utcnow().year,
         **flash_data,
     )
+
+
+@APP.post("/admin/proxmox/test")
+@login_required
+def proxmox_test():
+    if not proxmox_enabled():
+        return redirect_with_message("Proxmox VM mode is not enabled.", error=True)
+    ok, message = proxmox_health_check()
+    return redirect_with_message(message, error=not ok)
 
 
 @APP.post("/admin/users")
@@ -1241,6 +1353,17 @@ def create_user():
         workspace_type = request.form["workspace_type"]
         network_mode = request.form["network_mode"]
         password = request.form["password"]
+        proxmox_cores = parse_int_or_default(request.form.get("proxmox_cores", ""), PROXMOX_VM_CORES, 1, 64, "vCPU cores")
+        proxmox_memory_mb = parse_int_or_default(
+            request.form.get("proxmox_memory_mb", ""),
+            PROXMOX_VM_MEMORY_MB,
+            512,
+            1048576,
+            "VM memory",
+        )
+        proxmox_bridge = (request.form.get("proxmox_bridge", "") or PROXMOX_NET_BRIDGE).strip() or PROXMOX_NET_BRIDGE
+        proxmox_disk = (request.form.get("proxmox_disk", "") or "").strip()
+        proxmox_start_on_create = request.form.get("proxmox_start_on_create") == "1"
     except KeyError:
         return redirect_with_message("Required form field missing.", error=True)
     except ValueError as exc:
@@ -1268,6 +1391,17 @@ def create_user():
         "password_hash": password_hash(password),
         "enabled": True,
         "provider": "proxmox_vm" if proxmox_enabled() else "docker",
+        "proxmox_profile": (
+            {
+                "cores": proxmox_cores,
+                "memory_mb": proxmox_memory_mb,
+                "bridge": proxmox_bridge,
+                "disk": proxmox_disk,
+                "start_on_create": proxmox_start_on_create,
+            }
+            if proxmox_enabled()
+            else {}
+        ),
         "service_name": make_id(route, workspace_type),
         "container_name": f"mwc-{make_id(route, workspace_type)}",
         "volumes": build_volume_map(route, workspace_type),

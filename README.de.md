@@ -198,6 +198,18 @@ Optionale Ressourcen- und Netzwerk-Parameter:
 - `MWC_PROXMOX_NET_BRIDGE`
 - `MWC_PROXMOX_VM_START_ON_CREATE`
 - `MWC_PROXMOX_VERIFY_TLS`
+- `MWC_PROXMOX_DESKTOP_URL_TEMPLATE`
+
+Im Proxmox-VM-Modus bietet die Admin-WebUI zusätzlich:
+
+- VM-Overrides pro Benutzer (vCPU, RAM, Bridge, Disk, Auto-Start)
+- einen integrierten `Proxmox API testen`-Button für einen End-to-End-API-Check
+
+Zusätzlich kannst du einen manuellen API-Smoke-Test in der Shell starten:
+
+```bash
+sh scripts/proxmox-api-smoke.sh
+```
 
 ## Optionaler Externer Proxy
 

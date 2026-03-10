@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.1] - 2026-03-10
+
+### Added
+- Proxmox API end-to-end self-test action in the admin UI
+- Per-user Proxmox VM overrides in workspace creation (vCPU, RAM, bridge, disk, start-on-create)
+- Manual Proxmox API smoke test script at `scripts/proxmox-api-smoke.sh`
+
+### Changed
+- Exposed `MWC_PROXMOX_DESKTOP_URL_TEMPLATE` in environment examples and Compose files
+
 ## [0.6.0] - 2026-03-10
 
 ### Added

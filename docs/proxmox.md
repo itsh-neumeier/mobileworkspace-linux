@@ -137,6 +137,7 @@ Optional:
 - `MWC_PROXMOX_NET_BRIDGE` (default `vmbr0`)
 - `MWC_PROXMOX_VM_START_ON_CREATE` (default `true`)
 - `MWC_PROXMOX_VERIFY_TLS` (default `true`)
+- `MWC_PROXMOX_DESKTOP_URL_TEMPLATE`
 
 Notes:
 
@@ -147,3 +148,5 @@ Notes:
   - disable -> stop
   - redeploy -> stop/start
   - delete -> stop/delete
+- The admin UI includes a `Test Proxmox API` action for live validation.
+- A shell smoke test is available at `scripts/proxmox-api-smoke.sh`.

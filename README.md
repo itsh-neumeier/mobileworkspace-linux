@@ -198,6 +198,18 @@ Optional sizing and network controls:
 - `MWC_PROXMOX_NET_BRIDGE`
 - `MWC_PROXMOX_VM_START_ON_CREATE`
 - `MWC_PROXMOX_VERIFY_TLS`
+- `MWC_PROXMOX_DESKTOP_URL_TEMPLATE`
+
+In Proxmox VM mode, the admin UI also provides:
+
+- per-user VM overrides (vCPU, RAM, bridge, disk, auto-start)
+- a built-in `Test Proxmox API` button for an end-to-end API check
+
+You can also run a manual API smoke test from shell:
+
+```bash
+sh scripts/proxmox-api-smoke.sh
+```
 
 ## Optional External Proxy
 
