@@ -1,0 +1,34 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate semantic version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          if ! [[ "$TAG" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Tag $TAG is not valid semver"
+            exit 1
+          fi
+
+      - name: Create release archive
+        run: |
+          mkdir dist
+          tar --exclude='./.git' -czf "dist/mobile-web-console-${GITHUB_REF_NAME}.tar.gz" .
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/mobile-web-console-${{ github.ref_name }}.tar.gz
+          generate_release_notes: true

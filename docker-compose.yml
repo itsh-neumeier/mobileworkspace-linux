@@ -1,0 +1,105 @@
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      DOMAIN_OR_HOST: ${DOMAIN_OR_HOST}
+      PUBLIC_USER_NAME: ${PUBLIC_USER_NAME}
+      PUBLIC_USER_PASSWORD_HASH: ${PUBLIC_USER_PASSWORD_HASH}
+      PUBLIC_DESKTOP_USER_NAME: ${PUBLIC_DESKTOP_USER_NAME}
+      PUBLIC_DESKTOP_USER_PASSWORD_HASH: ${PUBLIC_DESKTOP_USER_PASSWORD_HASH}
+      INTERNAL_USER_NAME: ${INTERNAL_USER_NAME}
+      INTERNAL_USER_PASSWORD_HASH: ${INTERNAL_USER_PASSWORD_HASH}
+      INTERNAL_DESKTOP_USER_NAME: ${INTERNAL_DESKTOP_USER_NAME}
+      INTERNAL_DESKTOP_USER_PASSWORD_HASH: ${INTERNAL_DESKTOP_USER_PASSWORD_HASH}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - workspace-public
+      - workspace-internal
+      - desktop-public
+      - desktop-internal
+    networks:
+      - edge
+
+  workspace-public:
+    image: lscr.io/linuxserver/code-server:4.104.2
+    container_name: workspace-public
+    restart: unless-stopped
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Berlin
+      PASSWORD: ${PUBLIC_WORKSPACE_PASSWORD}
+      SUDO_PASSWORD: ${PUBLIC_WORKSPACE_PASSWORD}
+      DEFAULT_WORKSPACE: /config/workspace
+    volumes:
+      - ./data/public/config:/config
+    networks:
+      - edge
+      - public_net
+
+  workspace-internal:
+    image: lscr.io/linuxserver/code-server:4.104.2
+    container_name: workspace-internal
+    restart: unless-stopped
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Berlin
+      PASSWORD: ${INTERNAL_WORKSPACE_PASSWORD}
+      SUDO_PASSWORD: ${INTERNAL_WORKSPACE_PASSWORD}
+      DEFAULT_WORKSPACE: /config/workspace
+    volumes:
+      - ./data/internal/config:/config
+    networks:
+      - edge
+      - internal_net
+
+  desktop-public:
+    image: lscr.io/linuxserver/webtop:ubuntu-kde
+    container_name: desktop-public
+    restart: unless-stopped
+    shm_size: "1gb"
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Berlin
+      SUBFOLDER: /desktop-public/
+      TITLE: Public Desktop
+    volumes:
+      - ./data/desktop-public/config:/config
+    networks:
+      - edge
+      - public_net
+
+  desktop-internal:
+    image: lscr.io/linuxserver/webtop:ubuntu-kde
+    container_name: desktop-internal
+    restart: unless-stopped
+    shm_size: "1gb"
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Berlin
+      SUBFOLDER: /desktop-internal/
+      TITLE: Internal Desktop
+    volumes:
+      - ./data/desktop-internal/config:/config
+    networks:
+      - edge
+      - internal_net
+
+networks:
+  edge:
+  public_net:
+  internal_net:
+    internal: true
+
+volumes:
+  caddy_data:
+  caddy_config:

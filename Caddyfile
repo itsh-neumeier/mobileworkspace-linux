@@ -1,0 +1,116 @@
+{$DOMAIN_OR_HOST} {
+	handle_path /public/* {
+		basicauth {
+			{$PUBLIC_USER_NAME} {$PUBLIC_USER_PASSWORD_HASH}
+		}
+		reverse_proxy workspace-public:8080
+	}
+
+	handle_path /desktop-public/* {
+		basicauth {
+			{$PUBLIC_DESKTOP_USER_NAME} {$PUBLIC_DESKTOP_USER_PASSWORD_HASH}
+		}
+		reverse_proxy desktop-public:3000
+	}
+
+	handle_path /internal/* {
+		basicauth {
+			{$INTERNAL_USER_NAME} {$INTERNAL_USER_PASSWORD_HASH}
+		}
+		reverse_proxy workspace-internal:8080
+	}
+
+	handle_path /desktop-internal/* {
+		basicauth {
+			{$INTERNAL_DESKTOP_USER_NAME} {$INTERNAL_DESKTOP_USER_PASSWORD_HASH}
+		}
+		reverse_proxy desktop-internal:3000
+	}
+
+	handle {
+		respond <<HTML
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mobile Web Console Hub</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #09111f;
+      --panel: rgba(255,255,255,0.08);
+      --text: #f5f7fb;
+      --muted: #c3ccda;
+      --accent: #7dd3fc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at top left, rgba(125, 211, 252, 0.25), transparent 30%),
+        linear-gradient(160deg, #09111f 0%, #101a2e 100%);
+      color: var(--text);
+      font-family: "Segoe UI", sans-serif;
+      padding: 24px;
+    }
+    main {
+      width: min(720px, 100%);
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 24px;
+      padding: 28px;
+      backdrop-filter: blur(12px);
+    }
+    h1 { margin-top: 0; }
+    p { color: var(--muted); line-height: 1.5; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 24px;
+    }
+    a {
+      display: block;
+      text-decoration: none;
+      color: var(--text);
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px;
+      padding: 18px;
+    }
+    strong { display: block; margin-bottom: 8px; }
+    span { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Mobile Web Console Hub</h1>
+    <p>Select a workspace. Each route can have its own auth credentials, persistence, and network policy.</p>
+    <div class="grid">
+      <a href="/public/">
+        <strong>Public Workspace</strong>
+        <span>Internet-enabled terminal workspace</span>
+      </a>
+      <a href="/desktop-public/">
+        <strong>Public Desktop</strong>
+        <span>Internet-enabled Linux desktop via WebVNC</span>
+      </a>
+      <a href="/internal/">
+        <strong>Internal Workspace</strong>
+        <span>Internal-network-only terminal workspace</span>
+      </a>
+      <a href="/desktop-internal/">
+        <strong>Internal Desktop</strong>
+        <span>Internal-network-only Linux desktop via WebVNC</span>
+      </a>
+    </div>
+  </main>
+</body>
+</html>
+HTML 200
+	}
+}
