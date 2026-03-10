@@ -765,6 +765,8 @@ def ensure_storage() -> None:
         GENERATED_PROXY.write_text("# Generated routes for user workspaces will be written here by the admin UI.\n", encoding="utf-8")
     if not BASE_COMPOSE.exists():
         BASE_COMPOSE.write_text(render_base_compose(), encoding="utf-8")
+    if proxmox_enabled():
+        clear_generated_proxy_files()
     ensure_admin_credentials()
 
 
@@ -1033,9 +1035,15 @@ def reload_proxy() -> tuple[bool, str]:
 
 def provision(users) -> tuple[bool, str]:
     if PROVISIONER_MODE == "proxmox_vm":
+        clear_generated_proxy_files()
         return True, "Proxmox VM mode active."
     write_generated_files(users)
     return deploy_stack(users)
+
+
+def clear_generated_proxy_files() -> None:
+    GENERATED_PROXY.write_text("# Generated routes for user workspaces will be written here by the admin UI.\n", encoding="utf-8")
+    GENERATED_COMPOSE.write_text("services: {}\nvolumes: {}\n", encoding="utf-8")
 
 
 def proxmox_enabled() -> bool:

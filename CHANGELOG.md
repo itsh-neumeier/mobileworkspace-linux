@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.2] - 2026-03-10
+
+### Fixed
+- In `proxmox_vm` mode, generated nginx/docker files are now auto-cleared to avoid restart loops from stale Docker workspace upstreams
+
 ## [0.6.1] - 2026-03-10
 
 ### Added
