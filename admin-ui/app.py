@@ -417,8 +417,8 @@ PAGE_TEMPLATE = """
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
           <select class="form-select form-select-sm rounded-pill" id="langSelect" style="width:auto">
-            <option value="en" {{ 'selected' if lang == 'en' else '' }}>🇬🇧 English</option>
-            <option value="de" {{ 'selected' if lang == 'de' else '' }}>🇩🇪 Deutsch</option>
+            <option value="en" {{ 'selected' if lang == 'en' else '' }}>&#127468;&#127463;</option>
+            <option value="de" {{ 'selected' if lang == 'de' else '' }}>&#127465;&#127466;</option>
           </select>
           <a class="btn btn-outline-secondary" href="{{ url_for('index', lang=lang) }}"><i class="bi bi-grid-1x2-fill me-2"></i>{{ tr.menu_dashboard }}</a>
           <a class="btn btn-outline-secondary" href="{{ url_for('workspaces_page', lang=lang) }}"><i class="bi bi-hdd-stack me-2"></i>{{ tr.menu_workspaces }}</a>
@@ -763,8 +763,8 @@ LOGIN_TEMPLATE = """
     <div class="mb-3">
       <label class="form-label fw-semibold">{{ tr.language }}</label>
       <select class="form-select rounded-4" id="langSelect">
-        <option value="en" {{ 'selected' if lang == 'en' else '' }}>🇬🇧 English</option>
-        <option value="de" {{ 'selected' if lang == 'de' else '' }}>🇩🇪 Deutsch</option>
+        <option value="en" {{ 'selected' if lang == 'en' else '' }}>&#127468;&#127463;</option>
+        <option value="de" {{ 'selected' if lang == 'de' else '' }}>&#127465;&#127466;</option>
       </select>
     </div>
     {% if error %}
@@ -833,8 +833,8 @@ CHANGE_PASSWORD_TEMPLATE = """
     <div class="mb-3">
       <label class="form-label fw-semibold">{{ tr.language }}</label>
       <select class="form-select rounded-4" id="langSelect">
-        <option value="en" {{ 'selected' if lang == 'en' else '' }}>🇬🇧 English</option>
-        <option value="de" {{ 'selected' if lang == 'de' else '' }}>🇩🇪 Deutsch</option>
+        <option value="en" {{ 'selected' if lang == 'en' else '' }}>&#127468;&#127463;</option>
+        <option value="de" {{ 'selected' if lang == 'de' else '' }}>&#127465;&#127466;</option>
       </select>
     </div>
     {% if error %}
@@ -1125,7 +1125,12 @@ ADMIN_DASHBOARD_TEMPLATE = """
         <a class="card border-0 shadow-sm rounded-4 text-decoration-none text-body" href="{{ url_for('proxmox_settings_page', lang=lang) }}">
           <div class="card-body">
             <div class="text-body-secondary small">{{ tr.menu_proxmox }}</div>
-            <div class="h4 mb-0">{{ 'enabled' if proxmox_mode else 'disabled' }}</div>
+            <div class="h4 mb-1 {{ 'text-success' if proxmox_mode else 'text-danger' }}">{{ '✓' if proxmox_mode else '✕' }}</div>
+            {% if proxmox_summary %}
+            <div class="small text-body-secondary">
+              CPU {{ proxmox_summary.cpu_percent }}% · RAM {{ proxmox_summary.memory_used_gb }}/{{ proxmox_summary.memory_total_gb }} GB · Disk {{ proxmox_summary.disk_used_gb }}/{{ proxmox_summary.disk_total_gb }} GB
+            </div>
+            {% endif %}
           </div>
         </a>
       </div>
@@ -1740,11 +1745,15 @@ def proxmox_headers(settings: dict, has_payload: bool = False) -> dict:
 
 
 def proxmox_request(method: str, path: str, settings: dict, data: dict | None = None) -> dict:
+    method_upper = method.upper()
+    query = ""
     payload = None
-    if data is not None:
+    if data is not None and method_upper in {"GET", "DELETE"}:
+        query = "?" + urlencode(data)
+    elif data is not None:
         payload = urlencode(data).encode("utf-8")
     req = Request(
-        url=f"{settings['api_url']}/api2/json{path}",
+        url=f"{settings['api_url']}/api2/json{path}{query}",
         data=payload,
         method=method,
         headers=proxmox_headers(settings, has_payload=payload is not None),
@@ -2317,10 +2326,12 @@ def index():
         flash_data["flash"] = sync_message
         flash_data["flash_error"] = False
     unique_users = len({str(user.get("username", "")).strip() for user in users if str(user.get("username", "")).strip()})
+    proxmox_summary = proxmox_node_usage() if proxmox_enabled() else {}
     return render_template_string(
         ADMIN_DASHBOARD_TEMPLATE,
         users=users,
         unique_user_count=unique_users,
+        proxmox_summary=proxmox_summary,
         tr=tr,
         lang=lang,
         proxmox_mode=proxmox_enabled(),

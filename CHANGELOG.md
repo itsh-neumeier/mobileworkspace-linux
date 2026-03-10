@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.18] - 2026-03-10
+
+### Changed
+- Language switch now uses flag-only rendering (EN/DE) in admin/login views
+- Proxmox dashboard card now shows a clear status icon (`✓` green / `✕` red) instead of plain text
+- Proxmox dashboard card includes summarized load metrics (CPU/RAM/Disk)
+
+### Fixed
+- Proxmox API GET/DELETE query parameters are now sent as URL query string instead of request body (fixes `HTTP 501 ... Unexpected content for method 'GET'`)
+
 ## [0.6.17] - 2026-03-10
 
 ### Changed
