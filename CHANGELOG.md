@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.5.7] - 2026-03-10
+
+### Fixed
+- Added nginx proxy routes for `/login/` and `/logout/` so the admin UI redirect flow no longer falls back to nginx 404 pages
+
 ## [0.5.6] - 2026-03-10
 
 ### Added
