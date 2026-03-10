@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.5.13] - 2026-03-10
+
+### Fixed
+- Changed generated workspace nginx routes to use runtime-resolved upstream variables, preventing container restart loops when a workspace container is temporarily not resolvable
+
 ## [0.5.12] - 2026-03-10
 
 ### Fixed

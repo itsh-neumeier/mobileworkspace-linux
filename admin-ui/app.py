@@ -822,7 +822,8 @@ def nginx_block(user: dict) -> str:
 location ^~ {route}/ {{
     auth_basic "Mobile Web Console Hub";
     auth_basic_user_file {auth_file.as_posix()};
-    proxy_pass http://{user["container_name"]}:{upstream_port(user)};
+    set $workspace_upstream http://{user["container_name"]}:{upstream_port(user)};
+    proxy_pass $workspace_upstream;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
