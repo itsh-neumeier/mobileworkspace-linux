@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.5.6] - 2026-03-10
+
+### Added
+- Automated container smoke test workflow for push, tag, and pull request events
+- CI compose override file for reproducible stack startup checks in GitHub Actions
+
+### Changed
+- Release workflow now requires a successful container smoke run before creating a release
+
 ## [0.5.5] - 2026-03-10
 
 ### Fixed

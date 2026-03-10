@@ -6,7 +6,35 @@ on:
       - "v*.*.*"
 
 jobs:
+  container-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and start stack
+        run: |
+          docker compose -f docker-compose.portainer.yml -f docker-compose.ci.yml up -d --build
+
+      - name: Wait for web entrypoint
+        run: |
+          for i in {1..60}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18080/ || true)
+            if [ "$code" = "200" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.portainer.yml -f docker-compose.ci.yml logs
+          exit 1
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -f docker-compose.portainer.yml -f docker-compose.ci.yml down -v
+
   validate-and-package:
+    needs: container-smoke
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -1,0 +1,9 @@
+services:
+  nginx:
+    ports:
+      - "18080:80"
+
+  admin-ui:
+    image: mobileworkspace-admin-ui:ci
+    build:
+      context: ./admin-ui
