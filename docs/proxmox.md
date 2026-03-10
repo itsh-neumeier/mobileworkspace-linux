@@ -42,7 +42,7 @@ Increase RAM if several desktop users will be active at the same time.
 7. Start the stack with `docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d`.
 8. Open `/admin/` and create user workspaces from the web UI.
 
-If you prefer Portainer, use `docker-compose.portainer.yml` in the stack editor instead of the repo-oriented Compose file. That variant is designed to avoid relative file mounts.
+If you prefer Portainer, use `docker-compose.portainer.yml` in the stack editor instead of the repo-oriented Compose file. That variant is designed to avoid relative file mounts and uses nginx as the internal reverse proxy.
 
 If you want to pin a specific published image version:
 
@@ -56,7 +56,7 @@ Typical setup:
 
 - Proxmox bridge: `vmbr0`
 - VM NIC attached to `vmbr0`
-- Caddy exposed on port `80`
+- nginx exposed on port `80`
 - Optional TLS reverse proxy or firewall rules in front
 
 For internet-exposed access:
@@ -76,7 +76,7 @@ Persisted user data is stored under:
 
 - `/path/to/repo/users/users.json`
 - `/path/to/repo/generated/docker-compose.users.yml`
-- `/path/to/repo/generated/Caddy.users`
+- `/path/to/repo/generated/nginx.users.conf`
 
 For the Portainer-compatible stack, state lives primarily in Docker named volumes instead of repo-relative paths.
 

@@ -1,3 +1,4 @@
 Flask==3.1.0
 bcrypt==4.2.1
 gunicorn==23.0.0
+passlib==1.7.4

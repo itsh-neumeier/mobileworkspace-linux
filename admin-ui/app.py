@@ -1,12 +1,16 @@
 import json
 import os
 import re
+import secrets
 import subprocess
 from datetime import datetime
+from functools import wraps
 from pathlib import Path
 
 import bcrypt
-from flask import Flask, redirect, render_template_string, request, url_for
+from flask import Flask, redirect, render_template_string, request, session, url_for
+from passlib.apache import HtpasswdFile
+from passlib.hash import bcrypt as passlib_bcrypt
 
 
 PROJECT_ROOT = Path(os.environ.get("MWC_PROJECT_ROOT", "/workspace"))
@@ -14,7 +18,8 @@ USERS_FILE = Path(os.environ.get("MWC_USERS_FILE", PROJECT_ROOT / "users" / "use
 GENERATED_COMPOSE = Path(
     os.environ.get("MWC_GENERATED_COMPOSE", PROJECT_ROOT / "generated" / "docker-compose.users.yml")
 )
-GENERATED_CADDY = Path(os.environ.get("MWC_GENERATED_CADDY", PROJECT_ROOT / "generated" / "Caddy.users"))
+GENERATED_PROXY = Path(os.environ.get("MWC_GENERATED_PROXY", PROJECT_ROOT / "generated" / "nginx.users.conf"))
+GENERATED_AUTH_DIR = Path(os.environ.get("MWC_GENERATED_AUTH_DIR", PROJECT_ROOT / "generated" / "auth"))
 BASE_COMPOSE = Path(os.environ.get("MWC_BASE_COMPOSE", PROJECT_ROOT / "base" / "docker-compose.base.yml"))
 DOMAIN_OR_HOST = os.environ.get("MWC_DOMAIN_OR_HOST", "localhost")
 TIMEZONE = os.environ.get("MWC_TIMEZONE", "Europe/Berlin")
@@ -25,7 +30,11 @@ EDGE_NETWORK = os.environ.get("MWC_EDGE_NETWORK", "mobileworkspace_edge")
 PUBLIC_NETWORK = os.environ.get("MWC_PUBLIC_NETWORK", "mobileworkspace_public_net")
 INTERNAL_NETWORK = os.environ.get("MWC_INTERNAL_NETWORK", "mobileworkspace_internal_net")
 USER_PROJECT = os.environ.get("MWC_USER_PROJECT", "mobileworkspace-users")
-CADDY_CONTAINER_NAME = os.environ.get("MWC_CADDY_CONTAINER_NAME", "mobileworkspace-caddy")
+PROXY_CONTAINER_NAME = os.environ.get("MWC_PROXY_CONTAINER_NAME", "mobileworkspace-proxy")
+ADMIN_USER_FILE = Path(os.environ.get("MWC_ADMIN_USER_FILE", PROJECT_ROOT / "bootstrap" / "admin-user-name"))
+ADMIN_HASH_FILE = Path(os.environ.get("MWC_ADMIN_HASH_FILE", PROJECT_ROOT / "bootstrap" / "admin-password-hash"))
+ADMIN_PLAIN_FILE = Path(os.environ.get("MWC_ADMIN_PLAIN_FILE", PROJECT_ROOT / "bootstrap" / "admin-password-plain"))
+SESSION_SECRET_FILE = Path(os.environ.get("MWC_SESSION_SECRET_FILE", PROJECT_ROOT / "bootstrap" / "session-secret"))
 
 APP = Flask(__name__)
 
@@ -183,10 +192,16 @@ PAGE_TEMPLATE = """
           <h1 class="display-6 fw-bold mb-1">Admin Console</h1>
           <p class="text-body-secondary mb-0">Create isolated Linux workspaces with terminal or WebVNC desktop access directly from the browser.</p>
         </div>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+          <span class="soft-badge"><i class="bi bi-person-badge me-2"></i>{{ admin_username }}</span>
           <button class="btn btn-outline-secondary theme-toggle" type="button" id="themeToggle" aria-label="Toggle theme">
             <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
           </button>
+          <form method="post" action="{{ url_for('logout') }}">
+            <button class="btn btn-outline-secondary" type="submit">
+              <i class="bi bi-box-arrow-right me-2"></i>Logout
+            </button>
+          </form>
         </div>
       </header>
 
@@ -194,7 +209,7 @@ PAGE_TEMPLATE = """
         <div class="row g-4 align-items-center">
           <div class="col-lg-8">
             <div class="hero-title fw-bold mb-3">Provision users, routes, and containers from one place.</div>
-            <p class="lead text-body-secondary mb-0">Choose terminal or desktop mode, assign a network policy, and let the panel regenerate Docker Compose and Caddy configuration automatically.</p>
+            <p class="lead text-body-secondary mb-0">Choose terminal or desktop mode, assign a network policy, and let the panel regenerate Docker Compose and nginx routing automatically.</p>
           </div>
           <div class="col-lg-4">
             <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
@@ -252,7 +267,7 @@ PAGE_TEMPLATE = """
               <div class="mb-4">
                 <label class="form-label fw-semibold" for="password">User Password</label>
                 <input class="form-control" id="password" name="password" type="password" required>
-                <div class="form-text">Used for Caddy access protection and, for terminal workspaces, for the internal code-server login.</div>
+                <div class="form-text">Used for workspace access protection and, for terminal workspaces, for the internal code-server login.</div>
               </div>
 
               <button class="btn btn-primary w-100 py-3 fw-semibold" type="submit">
@@ -366,19 +381,122 @@ PAGE_TEMPLATE = """
 </html>
 """
 
+LOGIN_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mobile Web Console Hub Login</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 26%), linear-gradient(180deg, #eef4ff 0%, #dfe9f8 100%);
+      font-family: "Segoe UI", sans-serif;
+    }
+    .login-card {
+      width: min(460px, calc(100vw - 2rem));
+      border: 0;
+      border-radius: 1.75rem;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(14px);
+    }
+    .brand-badge {
+      width: 3rem;
+      height: 3rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card login-card p-4 p-lg-5">
+    <div class="d-flex align-items-center gap-3 mb-4">
+      <div class="brand-badge rounded-circle bg-primary-subtle text-primary d-inline-flex align-items-center justify-content-center">
+        <i class="bi bi-shield-lock-fill"></i>
+      </div>
+      <div>
+        <div class="text-uppercase small fw-semibold text-primary">Mobile Workspace</div>
+        <h1 class="h3 mb-0">Admin Login</h1>
+      </div>
+    </div>
+    <p class="text-body-secondary mb-4">Sign in to manage workspaces, user containers, and generated routes.</p>
+    {% if error %}
+    <div class="alert alert-danger rounded-4" role="alert">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="{{ url_for('login') }}">
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="username">User name</label>
+        <input class="form-control form-control-lg rounded-4" id="username" name="username" required autofocus>
+      </div>
+      <div class="mb-4">
+        <label class="form-label fw-semibold" for="password">Password</label>
+        <input class="form-control form-control-lg rounded-4" id="password" name="password" type="password" required>
+      </div>
+      <button class="btn btn-primary btn-lg w-100 rounded-pill" type="submit">
+        <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+      </button>
+    </form>
+    <div class="mt-4 text-center text-body-secondary small">
+      Mobile Web Console Hub v{{ version }}
+    </div>
+  </div>
+</body>
+</html>
+"""
+
 
 def ensure_storage() -> None:
     USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
     GENERATED_COMPOSE.parent.mkdir(parents=True, exist_ok=True)
+    GENERATED_AUTH_DIR.mkdir(parents=True, exist_ok=True)
     BASE_COMPOSE.parent.mkdir(parents=True, exist_ok=True)
+    ADMIN_USER_FILE.parent.mkdir(parents=True, exist_ok=True)
     if not USERS_FILE.exists():
         USERS_FILE.write_text("[]\n", encoding="utf-8")
     if not GENERATED_COMPOSE.exists():
         GENERATED_COMPOSE.write_text("services: {}\nvolumes: {}\n", encoding="utf-8")
-    if not GENERATED_CADDY.exists():
-        GENERATED_CADDY.write_text("# Generated routes for user workspaces will be written here by the admin UI.\n", encoding="utf-8")
+    if not GENERATED_PROXY.exists():
+        GENERATED_PROXY.write_text("# Generated routes for user workspaces will be written here by the admin UI.\n", encoding="utf-8")
     if not BASE_COMPOSE.exists():
         BASE_COMPOSE.write_text(render_base_compose(), encoding="utf-8")
+    ensure_admin_credentials()
+
+
+def ensure_admin_credentials() -> None:
+    existing_user = ADMIN_USER_FILE.read_text(encoding="utf-8").strip() if ADMIN_USER_FILE.exists() else ""
+    existing_hash = ADMIN_HASH_FILE.read_text(encoding="utf-8").strip() if ADMIN_HASH_FILE.exists() else ""
+    if existing_user and existing_hash:
+        return
+
+    username = os.environ.get("ADMIN_USER_NAME", "admin").strip() or "admin"
+    plain = secrets.token_urlsafe(12)
+    hashed = passlib_bcrypt.using(rounds=12).hash(plain)
+    ADMIN_USER_FILE.write_text(username, encoding="utf-8")
+    ADMIN_HASH_FILE.write_text(hashed, encoding="utf-8")
+    ADMIN_PLAIN_FILE.write_text(plain, encoding="utf-8")
+    print("==================================================")
+    print("Mobile Web Console Hub initial admin credentials")
+    print(f"Username: {username}")
+    print(f"Password: {plain}")
+    print(f"Open: http://{DOMAIN_OR_HOST}/admin/" if DOMAIN_OR_HOST not in {":80", ""} else "Open: http://HOST/admin/")
+    print("These credentials were generated on first start.")
+    print("==================================================")
+
+
+def ensure_session_secret() -> str:
+    if SESSION_SECRET_FILE.exists():
+        return SESSION_SECRET_FILE.read_text(encoding="utf-8").strip()
+    secret = secrets.token_hex(32)
+    SESSION_SECRET_FILE.write_text(secret, encoding="utf-8")
+    return secret
+
+
+APP.secret_key = ensure_session_secret()
 
 
 def load_users():
@@ -479,12 +597,29 @@ def actual_network_name(network: str) -> str:
     }[network]
 
 
-def caddy_block(user: dict) -> str:
-    return f"""handle_path {user["route_path"]}* {{
-\tbasicauth {{
-\t\t{user["username"]} {user["password_hash"]}
-\t}}
-\treverse_proxy {user["container_name"]}:{upstream_port(user)}
+def auth_file_for_user(user: dict) -> Path:
+    return GENERATED_AUTH_DIR / f"{user['route']}.htpasswd"
+
+
+def nginx_block(user: dict) -> str:
+    auth_file = auth_file_for_user(user)
+    auth_file.parent.mkdir(parents=True, exist_ok=True)
+    ht = HtpasswdFile(str(auth_file), new=True)
+    ht.set_password(user["username"], user["password"])
+    ht.save()
+    route = user["route_path"].rstrip("/")
+    return f"""
+location ^~ {route}/ {{
+    auth_basic "Mobile Web Console Hub";
+    auth_basic_user_file {auth_file.as_posix()};
+    proxy_pass http://{user["container_name"]}:{upstream_port(user)};
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
 }}
 """
 
@@ -506,13 +641,13 @@ def write_generated_files(users) -> None:
             }
         )
         compose_text += "volumes:\n" + "".join(f"  {volume_name}: {{}}\n" for volume_name in volume_names)
-        caddy_text = "".join(caddy_block(user) for user in enabled)
+        proxy_text = "".join(nginx_block(user) for user in enabled)
     else:
         compose_text = "services: {}\nvolumes: {}\n"
-        caddy_text = "# Generated routes for user workspaces will be written here by the admin UI.\n"
+        proxy_text = "# Generated routes for user workspaces will be written here by the admin UI.\n"
 
     GENERATED_COMPOSE.write_text(compose_text, encoding="utf-8")
-    GENERATED_CADDY.write_text(caddy_text, encoding="utf-8")
+    GENERATED_PROXY.write_text(proxy_text, encoding="utf-8")
 
 
 def render_base_compose() -> str:
@@ -550,20 +685,19 @@ def deploy_stack(users) -> tuple[bool, str]:
     if result.returncode != 0:
         return False, output or "Stack update failed."
 
-    reload_ok, reload_output = reload_caddy()
+    reload_ok, reload_output = reload_proxy()
     merged_output = "\n".join(part for part in [output, reload_output] if part).strip()
     return reload_ok, merged_output or "Stack updated."
 
 
-def reload_caddy() -> tuple[bool, str]:
+def reload_proxy() -> tuple[bool, str]:
     command = [
         "docker",
         "exec",
-        CADDY_CONTAINER_NAME,
-        "caddy",
+        PROXY_CONTAINER_NAME,
+        "nginx",
+        "-s",
         "reload",
-        "--config",
-        "/etc/caddy/Caddyfile",
     ]
     result = subprocess.run(
         command,
@@ -572,7 +706,7 @@ def reload_caddy() -> tuple[bool, str]:
         check=False,
     )
     output = "\n".join(part for part in [result.stdout.strip(), result.stderr.strip()] if part).strip()
-    return result.returncode == 0, output or "Caddy reloaded."
+    return result.returncode == 0, output or "Proxy reloaded."
 
 
 def provision(users) -> tuple[bool, str]:
@@ -582,6 +716,24 @@ def provision(users) -> tuple[bool, str]:
 
 def password_hash(plaintext: str) -> str:
     return bcrypt.hashpw(plaintext.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def verify_admin_auth(username: str, password: str) -> bool:
+    if not ADMIN_USER_FILE.exists() or not ADMIN_HASH_FILE.exists():
+        return False
+    expected_user = ADMIN_USER_FILE.read_text(encoding="utf-8").strip()
+    expected_hash = ADMIN_HASH_FILE.read_text(encoding="utf-8").strip()
+    return username == expected_user and passlib_bcrypt.verify(password, expected_hash)
+
+
+def login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if session.get("admin_authenticated"):
+            return view(*args, **kwargs)
+        return redirect(url_for("login", next=request.path))
+
+    return wrapped
 
 
 def current_flash():
@@ -600,7 +752,29 @@ def root():
     return redirect("/admin/")
 
 
+@APP.route("/login/", methods=["GET", "POST"])
+def login():
+    error = ""
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        if verify_admin_auth(username, password):
+            session["admin_authenticated"] = True
+            session["admin_username"] = username
+            next_url = request.args.get("next") or url_for("index")
+            return redirect(next_url)
+        error = "Invalid credentials."
+    return render_template_string(LOGIN_TEMPLATE, error=error, version=APP_VERSION)
+
+
+@APP.post("/logout/")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
 @APP.route("/admin/")
+@login_required
 def index():
     users = load_users()
     flash_data = current_flash()
@@ -611,12 +785,14 @@ def index():
         timezone=TIMEZONE,
         version=APP_VERSION,
         github_url=GITHUB_URL,
+        admin_username=session.get("admin_username", "admin"),
         copyright_year=datetime.utcnow().year,
         **flash_data,
     )
 
 
 @APP.post("/admin/users")
+@login_required
 def create_user():
     users = load_users()
     try:
@@ -667,6 +843,7 @@ def find_user(users, user_id: str):
 
 
 @APP.post("/admin/users/<user_id>/<action>")
+@login_required
 def toggle_user(user_id: str, action: str):
     users = load_users()
     user = find_user(users, user_id)
@@ -683,6 +860,7 @@ def toggle_user(user_id: str, action: str):
 
 
 @APP.post("/admin/users/<user_id>/redeploy")
+@login_required
 def redeploy_user(user_id: str):
     users = load_users()
     user = find_user(users, user_id)
@@ -695,6 +873,7 @@ def redeploy_user(user_id: str):
 
 
 @APP.post("/admin/users/<user_id>/delete")
+@login_required
 def delete_user(user_id: str):
     users = load_users()
     user = find_user(users, user_id)

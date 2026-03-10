@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.5.0] - 2026-03-10
+
+### Added
+- Built-in admin login flow in the web UI instead of proxy-level basic auth
+- nginx-based internal reverse proxy for standard and Portainer deployments
+- Optional guidance for placing Zoraxy in front of the stack for external publishing
+
+### Changed
+- Replaced internal Caddy routing with nginx route generation and htpasswd files
+- Admin bootstrap credentials are now generated and handled by the admin application
+
 ## [0.4.3] - 2026-03-10
 
 ### Fixed

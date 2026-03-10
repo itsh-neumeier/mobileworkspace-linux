@@ -21,7 +21,7 @@ The project is designed for situations where you work from managed notebooks or 
 - Automatic provisioning of per-user Docker containers
 - Terminal workspaces with `code-server`
 - Desktop workspaces with `webtop` over WebVNC
-- Per-user route generation in Caddy
+- Per-user route generation in nginx
 - Public or internal-only network placement per workspace
 - Persistent storage per user
 - Proxmox-friendly VM deployment model
@@ -30,10 +30,10 @@ The project is designed for situations where you work from managed notebooks or 
 
 ## Architecture
 
-- `caddy`: reverse proxy and entrypoint
-- `admin-ui`: browser-based admin panel that manages users and regenerates config
+- `nginx`: reverse proxy and entrypoint
+- `admin-ui`: browser-based admin panel with built-in admin login and workspace provisioning
 - `generated/docker-compose.users.yml`: generated service definitions for enabled users
-- `generated/Caddy.users`: generated reverse proxy routes for enabled users
+- `generated/nginx.users.conf`: generated reverse proxy routes for enabled users
 - `users/users.json`: local user registry created by the admin UI at runtime
 
 The admin UI writes the generated files and then runs:
@@ -52,30 +52,23 @@ This means user containers are created, updated, disabled, or deleted directly f
 cp .env.example .env
 ```
 
-2. Create an admin password hash for Caddy:
-
-```bash
-docker run --rm caddy:2.8-alpine caddy hash-password --plaintext "replace-me"
-```
-
-3. Edit `.env` and set:
+2. Edit `.env` and set:
 
 - `DOMAIN_OR_HOST`
 - `TIMEZONE`
 - `ADMIN_USER_NAME`
-- `ADMIN_USER_PASSWORD_HASH`
 
-4. Start the stack:
+3. Start the stack:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
 ```
 
-5. Open the admin panel:
+4. Open the admin panel:
 
 - `http://YOUR_HOST/admin/`
 
-6. Create users from the web UI.
+5. Sign in with the generated bootstrap admin credentials from the `admin-ui` container logs, then create users from the web UI.
 
 ## Compose Files
 
@@ -114,14 +107,13 @@ If you want to deploy this through the Portainer stack editor, use:
 
 - `docker-compose.portainer.yml`
 
-This variant avoids the local bind mounts that fail in Portainer when files such as `Caddyfile` are not present on the host path used by the stack editor.
+This variant avoids the local bind mounts that fail in Portainer when stack editor deployments expect repo files to exist on the Docker host.
 
 Recommended Portainer environment variables:
 
 - `DOMAIN_OR_HOST`
 - `TIMEZONE`
 - `ADMIN_USER_NAME`
-- `ADMIN_USER_PASSWORD_HASH`
 - `ADMIN_UI_IMAGE_TAG`
 - `MWC_EDGE_NETWORK`
 - `MWC_PUBLIC_NETWORK`
@@ -129,8 +121,8 @@ Recommended Portainer environment variables:
 
 Portainer stack behavior:
 
-- Caddy builds its base config inside the container at startup
-- on first run, if `ADMIN_USER_PASSWORD_HASH` is empty, Caddy generates a random admin password and logs it once
+- nginx builds its base config inside the container at startup
+- the admin UI generates a bootstrap admin account on first run and logs the initial password once
 - user registry and generated config are stored in a named volume
 - the admin UI provisions user containers through the Docker socket
 - user workspaces use named Docker volumes instead of relative host paths
@@ -139,9 +131,8 @@ Recommended for first boot:
 
 - `DOMAIN_OR_HOST=:80`
 - `ADMIN_USER_NAME=admin`
-- leave `ADMIN_USER_PASSWORD_HASH` empty
 
-After the first start, read the generated password from the `mobileworkspace-caddy` container logs in Portainer.
+After the first start, read the generated password from the `mobileworkspace-admin-ui` container logs in Portainer.
 
 The admin panel will then create routes such as:
 
@@ -162,9 +153,9 @@ The admin panel supports:
 Each created user gets:
 
 - an isolated container
-- a generated Caddy route
+- a generated nginx route
 - persistent Docker volumes for config and workspace data
-- access protection through Caddy basic auth
+- access protection through per-workspace nginx basic auth
 
 For terminal workspaces, the same password is also used for the internal `code-server` login.
 
@@ -180,9 +171,19 @@ That model is more reliable than running Docker inside an LXC container, especia
 
 Detailed guidance: `docs/proxmox.md`
 
+## Optional External Proxy
+
+If you want to publish the service externally, you can place another reverse proxy such as Zoraxy in front of this stack.
+
+Recommended setup:
+
+- Mobile Web Console Hub runs internally on plain HTTP
+- nginx inside this project handles `/admin/` and `/workspaces/...`
+- Zoraxy optionally handles public DNS, TLS certificates, and internet exposure
+
 ## Default Network Model
 
-- `edge`: network shared by Caddy, admin UI, and user workspaces
+- `edge`: network shared by nginx, admin UI, and user workspaces
 - `public_net`: Docker bridge network with outbound internet access
 - `internal_net`: Docker internal network without outbound internet access
 

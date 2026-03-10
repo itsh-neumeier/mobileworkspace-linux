@@ -1,19 +1,52 @@
 services:
-  caddy:
-    image: caddy:2.8-alpine
-    container_name: mobileworkspace-caddy
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: mobileworkspace-proxy
     restart: unless-stopped
     ports:
       - "80:80"
-    environment:
-      DOMAIN_OR_HOST: ${DOMAIN_OR_HOST}
-      ADMIN_USER_NAME: ${ADMIN_USER_NAME}
-      ADMIN_USER_PASSWORD_HASH: ${ADMIN_USER_PASSWORD_HASH}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /workspace/generated /etc/nginx
+        if [ ! -f /workspace/generated/nginx.users.conf ]; then
+          printf '# Generated routes for user workspaces will be written here by the admin UI.\n' > /workspace/generated/nginx.users.conf
+        fi
+        cat <<'EOF' > /etc/nginx/nginx.conf
+        worker_processes auto;
+        events { worker_connections 1024; }
+        http {
+          include /etc/nginx/mime.types;
+          default_type application/octet-stream;
+          map $http_upgrade $connection_upgrade {
+            default upgrade;
+            '' close;
+          }
+          server {
+            listen 80 default_server;
+            server_name _;
+            location = / {
+              default_type text/html;
+              return 200 '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mobile Web Console Hub</title></head><body><main><h1>Mobile Web Console Hub</h1><a href="/admin/">Open Admin Panel</a></main></body></html>';
+            }
+            location /admin/ {
+              proxy_pass http://admin-ui:8080;
+              proxy_http_version 1.1;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection $connection_upgrade;
+            }
+            include /workspace/generated/nginx.users.conf;
+          }
+        }
+        EOF
+        exec nginx -g 'daemon off;'
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./generated/Caddy.users:/etc/caddy/Caddy.users:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - ./:/workspace
     depends_on:
       - admin-ui
     networks:
@@ -27,14 +60,16 @@ services:
       MWC_PROJECT_ROOT: /workspace
       MWC_USERS_FILE: /workspace/users/users.json
       MWC_GENERATED_COMPOSE: /workspace/generated/docker-compose.users.yml
-      MWC_GENERATED_CADDY: /workspace/generated/Caddy.users
+      MWC_GENERATED_PROXY: /workspace/generated/nginx.users.conf
+      MWC_GENERATED_AUTH_DIR: /workspace/generated/auth
       MWC_BASE_COMPOSE: /workspace/base/docker-compose.base.yml
       MWC_DOMAIN_OR_HOST: ${DOMAIN_OR_HOST}
       MWC_TIMEZONE: ${TIMEZONE:-Europe/Berlin}
       MWC_EDGE_NETWORK: ${MWC_EDGE_NETWORK:-mobileworkspace_edge}
       MWC_PUBLIC_NETWORK: ${MWC_PUBLIC_NETWORK:-mobileworkspace_public_net}
       MWC_INTERNAL_NETWORK: ${MWC_INTERNAL_NETWORK:-mobileworkspace_internal_net}
-      MWC_CADDY_CONTAINER_NAME: mobileworkspace-caddy
+      MWC_PROXY_CONTAINER_NAME: mobileworkspace-proxy
+      ADMIN_USER_NAME: ${ADMIN_USER_NAME:-admin}
     volumes:
       - ./:/workspace
       - /var/run/docker.sock:/var/run/docker.sock
@@ -51,5 +86,3 @@ networks:
     internal: true
 
 volumes:
-  caddy_data:
-  caddy_config:

@@ -21,7 +21,7 @@ Das Projekt ist für Situationen gedacht, in denen du mit verwalteten Notebooks 
 - Automatische Bereitstellung der Container pro Benutzer
 - Terminal-Workspaces mit `code-server`
 - Desktop-Workspaces mit `webtop` über WebVNC
-- Automatische Caddy-Routen pro Benutzer
+- Automatische nginx-Routen pro Benutzer
 - Internet- oder Internal-only-Netz pro Workspace
 - Persistenter Speicher pro Benutzer
 - Für Proxmox-VMs ausgelegt
@@ -30,10 +30,10 @@ Das Projekt ist für Situationen gedacht, in denen du mit verwalteten Notebooks 
 
 ## Architektur
 
-- `caddy`: Reverse Proxy und Einstiegspunkt
-- `admin-ui`: browserbasierte Verwaltungsoberfläche, die Benutzer und Konfiguration erzeugt
+- `nginx`: Reverse Proxy und Einstiegspunkt
+- `admin-ui`: browserbasierte Verwaltungsoberfläche mit eingebautem Admin-Login und Workspace-Provisionierung
 - `generated/docker-compose.users.yml`: generierte Service-Definitionen für aktive Benutzer
-- `generated/Caddy.users`: generierte Reverse-Proxy-Routen für aktive Benutzer
+- `generated/nginx.users.conf`: generierte Reverse-Proxy-Routen für aktive Benutzer
 - `users/users.json`: lokale Benutzerregistrierung, die zur Laufzeit von der Admin-WebUI erzeugt wird
 
 Die Admin-WebUI schreibt die generierten Dateien und führt danach aus:
@@ -52,30 +52,23 @@ Damit werden Benutzercontainer direkt über den Browser erstellt, aktualisiert, 
 cp .env.example .env
 ```
 
-2. Passwort-Hash für den Admin-Zugang in Caddy erzeugen:
-
-```bash
-docker run --rm caddy:2.8-alpine caddy hash-password --plaintext "ersetzen"
-```
-
-3. `.env` bearbeiten und folgende Werte setzen:
+2. `.env` bearbeiten und folgende Werte setzen:
 
 - `DOMAIN_OR_HOST`
 - `TIMEZONE`
 - `ADMIN_USER_NAME`
-- `ADMIN_USER_PASSWORD_HASH`
 
-4. Stack starten:
+3. Stack starten:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
 ```
 
-5. Admin-WebUI öffnen:
+4. Admin-WebUI öffnen:
 
 - `http://DEIN_HOST/admin/`
 
-6. Benutzer und Workspaces in der WebUI anlegen.
+5. Mit den beim ersten Start erzeugten Bootstrap-Admin-Zugangsdaten aus den `admin-ui`-Logs anmelden und dann Benutzer und Workspaces in der WebUI anlegen.
 
 ## Compose-Dateien
 
@@ -114,14 +107,13 @@ Wenn du das Projekt über den Portainer-Stack-Editor deployen willst, verwende:
 
 - `docker-compose.portainer.yml`
 
-Diese Variante vermeidet die lokalen Bind-Mounts, die in Portainer scheitern, wenn Dateien wie `Caddyfile` auf dem vom Stack-Editor verwendeten Host-Pfad nicht vorhanden sind.
+Diese Variante vermeidet die lokalen Bind-Mounts, die in Portainer scheitern, wenn Stack-Editor-Deployments Projektdateien auf dem Docker-Host erwarten.
 
 Empfohlene Portainer-Umgebungsvariablen:
 
 - `DOMAIN_OR_HOST`
 - `TIMEZONE`
 - `ADMIN_USER_NAME`
-- `ADMIN_USER_PASSWORD_HASH`
 - `ADMIN_UI_IMAGE_TAG`
 - `MWC_EDGE_NETWORK`
 - `MWC_PUBLIC_NETWORK`
@@ -129,8 +121,8 @@ Empfohlene Portainer-Umgebungsvariablen:
 
 Verhalten des Portainer-Stacks:
 
-- Caddy erzeugt seine Basiskonfiguration beim Start im Container selbst
-- beim ersten Start erzeugt Caddy ein zufälliges Admin-Passwort und schreibt es einmal in die Logs, wenn `ADMIN_USER_PASSWORD_HASH` leer ist
+- nginx erzeugt seine Basiskonfiguration beim Start im Container selbst
+- die Admin-WebUI erzeugt beim ersten Start einen Bootstrap-Admin und schreibt das Initialpasswort einmal in die Logs
 - Benutzerregister und generierte Konfiguration liegen in einem benannten Docker-Volume
 - die Admin-WebUI provisioniert Benutzercontainer über den Docker-Socket
 - Benutzer-Workspaces verwenden benannte Docker-Volumes statt relativer Host-Pfade
@@ -139,9 +131,8 @@ Empfohlen für den ersten Start:
 
 - `DOMAIN_OR_HOST=:80`
 - `ADMIN_USER_NAME=admin`
-- `ADMIN_USER_PASSWORD_HASH` leer lassen
 
-Nach dem ersten Start liest du das generierte Passwort in Portainer aus den Logs des Containers `mobileworkspace-caddy`.
+Nach dem ersten Start liest du das generierte Passwort in Portainer aus den Logs des Containers `mobileworkspace-admin-ui`.
 
 Die Admin-WebUI erzeugt anschließend Routen wie:
 
@@ -162,9 +153,9 @@ Die Admin-WebUI unterstützt:
 Jeder angelegte Benutzer erhält:
 
 - einen isolierten Container
-- eine generierte Caddy-Route
+- eine generierte nginx-Route
 - persistente Docker-Volumes für Konfiguration und Workspace-Daten
-- Zugriffsschutz per Caddy Basic Auth
+- Zugriffsschutz per nginx Basic Auth
 
 Bei Terminal-Workspaces wird dasselbe Passwort zusätzlich für den internen `code-server`-Login verwendet.
 
@@ -180,9 +171,19 @@ Das ist robuster als Docker in einem LXC-Container, besonders wenn Benutzer dyna
 
 Detaillierte Anleitung: `docs/proxmox.md`
 
+## Optionaler Externer Proxy
+
+Wenn du den Dienst extern veröffentlichen willst, kannst du zusätzlich einen Reverse Proxy wie Zoraxy vor diesen Stack setzen.
+
+Empfohlenes Modell:
+
+- Mobile Web Console Hub läuft intern per HTTP
+- nginx in diesem Projekt übernimmt `/admin/` und `/workspaces/...`
+- Zoraxy übernimmt optional öffentliche Domain, TLS und den externen Zugriff
+
 ## Standard-Netzwerkmodell
 
-- `edge`: gemeinsames Netz für Caddy, Admin-WebUI und Benutzer-Workspaces
+- `edge`: gemeinsames Netz für nginx, Admin-WebUI und Benutzer-Workspaces
 - `public_net`: Docker-Bridge-Netz mit ausgehendem Internetzugang
 - `internal_net`: internes Docker-Netz ohne ausgehenden Internetzugang
 
