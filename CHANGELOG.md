@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.5.5] - 2026-03-10
+
+### Fixed
+- Escaped `$admin_upstream` in embedded nginx config so Portainer/Compose does not strip it before runtime
+- Removed direct bcrypt usage in app code and pinned a compatible bcrypt version to avoid passlib backend warnings
+
 ## [0.5.4] - 2026-03-10
 
 ### Fixed

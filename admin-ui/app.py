@@ -7,7 +7,6 @@ from datetime import datetime
 from functools import wraps
 from pathlib import Path
 
-import bcrypt
 from flask import Flask, redirect, render_template_string, request, session, url_for
 from passlib.apache import HtpasswdFile
 from passlib.hash import bcrypt as passlib_bcrypt
@@ -716,7 +715,7 @@ def provision(users) -> tuple[bool, str]:
 
 
 def password_hash(plaintext: str) -> str:
-    return bcrypt.hashpw(plaintext.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+    return passlib_bcrypt.using(rounds=12).hash(plaintext)
 
 
 def verify_admin_auth(username: str, password: str) -> bool:
