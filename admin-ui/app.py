@@ -18,6 +18,9 @@ GENERATED_CADDY = Path(os.environ.get("MWC_GENERATED_CADDY", PROJECT_ROOT / "gen
 DOMAIN_OR_HOST = os.environ.get("MWC_DOMAIN_OR_HOST", "localhost")
 TIMEZONE = os.environ.get("MWC_TIMEZONE", "Europe/Berlin")
 BASE_COMPOSE = PROJECT_ROOT / "docker-compose.yml"
+VERSION_FILE = PROJECT_ROOT / "VERSION"
+APP_VERSION = VERSION_FILE.read_text(encoding="utf-8").strip() if VERSION_FILE.exists() else "dev"
+GITHUB_URL = "https://github.com/itsh-neumeier/mobileworkspace-linux"
 
 APP = Flask(__name__)
 
@@ -29,254 +32,331 @@ PAGE_TEMPLATE = """
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mobile Web Console Hub Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
     :root {
-      --bg: #f3f7f8;
-      --paper: #ffffff;
-      --paper-soft: #eef5f3;
-      --line: #d6e2de;
-      --text: #10211d;
-      --muted: #4b615b;
-      --accent: #0f766e;
-      --accent-dark: #115e59;
-      --danger: #b42318;
-      --shadow: 0 24px 60px rgba(16, 33, 29, 0.12);
+      --mwc-bg: radial-gradient(circle at top left, rgba(29, 78, 216, 0.18), transparent 26%), linear-gradient(180deg, #f4f7fb 0%, #e8eef8 100%);
+      --mwc-surface: rgba(255, 255, 255, 0.9);
+      --mwc-surface-strong: rgba(255, 255, 255, 0.97);
+      --mwc-border: rgba(148, 163, 184, 0.28);
+      --mwc-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+      --mwc-accent: #0f62fe;
+      --mwc-accent-soft: rgba(15, 98, 254, 0.12);
+      --mwc-success-soft: rgba(34, 197, 94, 0.14);
+      --mwc-danger-soft: rgba(239, 68, 68, 0.14);
+      --mwc-warning-soft: rgba(245, 158, 11, 0.16);
     }
-    * { box-sizing: border-box; }
+    [data-bs-theme="dark"] {
+      --mwc-bg: radial-gradient(circle at top left, rgba(96, 165, 250, 0.16), transparent 28%), linear-gradient(180deg, #020817 0%, #0f172a 100%);
+      --mwc-surface: rgba(15, 23, 42, 0.82);
+      --mwc-surface-strong: rgba(15, 23, 42, 0.96);
+      --mwc-border: rgba(148, 163, 184, 0.18);
+      --mwc-shadow: 0 24px 60px rgba(2, 6, 23, 0.45);
+      --mwc-accent: #7cc4ff;
+      --mwc-accent-soft: rgba(124, 196, 255, 0.14);
+      --mwc-success-soft: rgba(34, 197, 94, 0.18);
+      --mwc-danger-soft: rgba(248, 113, 113, 0.16);
+      --mwc-warning-soft: rgba(251, 191, 36, 0.18);
+    }
     body {
-      margin: 0;
-      background:
-        radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 24%),
-        linear-gradient(180deg, #f3f7f8 0%, #e6efec 100%);
-      color: var(--text);
-      font-family: "Segoe UI", sans-serif;
+      background: var(--mwc-bg);
+      color: var(--bs-body-color);
       min-height: 100vh;
-      padding: 24px;
+      font-family: "Segoe UI", sans-serif;
     }
-    .shell {
-      width: min(1200px, 100%);
-      margin: 0 auto;
+    .app-shell {
+      min-height: 100vh;
     }
-    .hero, .panel, .card {
-      background: rgba(255, 255, 255, 0.92);
-      border: 1px solid var(--line);
-      border-radius: 24px;
-      box-shadow: var(--shadow);
+    .glass-panel {
+      background: var(--mwc-surface);
+      border: 1px solid var(--mwc-border);
+      box-shadow: var(--mwc-shadow);
+      backdrop-filter: blur(14px);
     }
-    .hero {
-      padding: 28px;
-      margin-bottom: 24px;
+    .hero-card {
+      border-radius: 2rem;
+      overflow: hidden;
+      position: relative;
     }
-    .hero h1 { margin: 0 0 10px; font-size: clamp(2rem, 3vw, 3rem); }
-    .hero p { margin: 0; color: var(--muted); line-height: 1.6; max-width: 800px; }
-    .grid {
-      display: grid;
-      grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
-      gap: 24px;
-      align-items: start;
+    .hero-card::after {
+      content: "";
+      position: absolute;
+      inset: auto -10% -35% auto;
+      width: 22rem;
+      height: 22rem;
+      background: radial-gradient(circle, var(--mwc-accent-soft) 0%, transparent 68%);
+      pointer-events: none;
     }
-    .panel, .card { padding: 24px; }
-    h2, h3 { margin-top: 0; }
-    .meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 16px;
+    .hero-title {
+      font-size: clamp(2.2rem, 3vw, 3.4rem);
+      letter-spacing: -0.04em;
     }
-    .badge {
-      background: var(--paper-soft);
-      color: var(--accent-dark);
-      border: 1px solid var(--line);
+    .metric-chip {
+      background: var(--mwc-surface-strong);
+      border: 1px solid var(--mwc-border);
       border-radius: 999px;
-      padding: 8px 12px;
-      font-size: 0.9rem;
-      font-weight: 600;
+      padding: 0.55rem 0.9rem;
+      font-size: 0.92rem;
     }
-    .flash {
-      margin: 0 0 18px;
-      padding: 14px 16px;
-      border-radius: 16px;
-      background: #ecfdf3;
-      border: 1px solid #a7f3d0;
-      color: #0f5132;
+    .section-card {
+      border-radius: 1.75rem;
     }
-    .flash.error {
-      background: #fff3f2;
-      border-color: #fecdca;
-      color: #7a271a;
+    .form-control,
+    .form-select {
+      border-radius: 1rem;
+      padding-top: 0.8rem;
+      padding-bottom: 0.8rem;
     }
-    label {
-      display: block;
-      font-weight: 600;
-      margin-bottom: 6px;
+    .form-control:focus,
+    .form-select:focus,
+    .btn:focus {
+      box-shadow: 0 0 0 0.25rem var(--mwc-accent-soft);
     }
-    input, select {
-      width: 100%;
-      padding: 12px 14px;
-      border-radius: 14px;
-      border: 1px solid var(--line);
-      background: white;
-      margin-bottom: 16px;
-      font: inherit;
-    }
-    .hint { color: var(--muted); font-size: 0.92rem; margin-top: -8px; margin-bottom: 16px; }
-    button, .button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border: 0;
+    .btn {
       border-radius: 999px;
-      padding: 11px 16px;
-      font-weight: 700;
-      cursor: pointer;
-      font: inherit;
-      text-decoration: none;
     }
-    .button-primary { background: var(--accent); color: white; }
-    .button-secondary { background: var(--paper-soft); color: var(--accent-dark); }
-    .button-danger { background: #fee4e2; color: var(--danger); }
-    .button-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 12px;
+    .btn-primary {
+      background: var(--mwc-accent);
+      border-color: var(--mwc-accent);
     }
-    .list {
-      display: grid;
-      gap: 16px;
+    .btn-outline-secondary {
+      border-color: var(--mwc-border);
     }
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      gap: 16px;
-      align-items: start;
+    .theme-toggle {
+      width: 2.75rem;
+      height: 2.75rem;
     }
-    .user-meta {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin: 12px 0;
+    .workspace-card {
+      border-radius: 1.5rem;
+      background: var(--mwc-surface-strong);
+      border: 1px solid var(--mwc-border);
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
     }
-    .status-active { color: #027a48; }
-    .status-disabled { color: #b54708; }
-    code {
-      background: #eff7f6;
-      padding: 2px 8px;
+    .workspace-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--mwc-shadow);
+    }
+    .soft-badge {
       border-radius: 999px;
-      font-family: Consolas, monospace;
+      border: 1px solid var(--mwc-border);
+      padding: 0.45rem 0.8rem;
+      background: var(--mwc-surface);
+      font-size: 0.85rem;
     }
-    .url-box {
-      display: inline-flex;
-      padding: 10px 12px;
-      border-radius: 14px;
-      background: #f5fbfa;
-      border: 1px dashed var(--line);
+    .status-active {
+      background: var(--mwc-success-soft);
+      color: var(--bs-success-text-emphasis);
+    }
+    .status-disabled {
+      background: var(--mwc-warning-soft);
+      color: var(--bs-warning-text-emphasis);
+    }
+    .url-pill {
+      border-radius: 1rem;
+      background: var(--mwc-accent-soft);
+      color: var(--bs-body-color);
       word-break: break-all;
     }
-    .empty {
-      color: var(--muted);
-      padding: 30px;
-      text-align: center;
-      border: 1px dashed var(--line);
-      border-radius: 18px;
-      background: rgba(255,255,255,0.6);
+    .empty-state {
+      border: 1px dashed var(--mwc-border);
+      border-radius: 1.5rem;
+      background: color-mix(in srgb, var(--mwc-surface) 78%, transparent);
     }
-    @media (max-width: 960px) {
-      .grid { grid-template-columns: 1fr; }
+    .footer-shell {
+      border-top: 1px solid var(--mwc-border);
+      color: var(--bs-secondary-color);
     }
   </style>
 </head>
-<body>
-  <div class="shell">
-    <section class="hero">
-      <h1>Admin Panel</h1>
-      <p>Create isolated terminal or desktop environments for your users, choose whether they belong on an internet-enabled or internal-only network, and let the panel regenerate the Docker and Caddy configuration for you.</p>
-      <div class="meta">
-        <span class="badge">Host: {{ domain }}</span>
-        <span class="badge">Timezone: {{ timezone }}</span>
-        <span class="badge">Users: {{ users|length }}</span>
-      </div>
-    </section>
-
-    <div class="grid">
-      <section class="panel">
-        <h2>Create Workspace</h2>
-        {% if flash %}
-        <div class="flash {{ 'error' if flash_error else '' }}">{{ flash }}</div>
-        {% endif %}
-        <form method="post" action="{{ url_for('create_user') }}">
-          <label for="username">User Name</label>
-          <input id="username" name="username" placeholder="ops-team" required>
-
-          <label for="route">Route</label>
-          <input id="route" name="route" placeholder="ops-team" required>
-          <div class="hint">Will become the URL segment, for example <code>/workspaces/ops-team/</code>.</div>
-
-          <label for="workspace_type">Workspace Type</label>
-          <select id="workspace_type" name="workspace_type">
-            <option value="terminal">Terminal Workspace</option>
-            <option value="desktop">Desktop Workspace (WebVNC)</option>
-          </select>
-
-          <label for="network_mode">Network Mode</label>
-          <select id="network_mode" name="network_mode">
-            <option value="public">Internet Enabled</option>
-            <option value="internal">Internal Only</option>
-          </select>
-
-          <label for="password">User Password</label>
-          <input id="password" name="password" type="password" required>
-          <div class="hint">Used for Caddy access protection and, for terminal workspaces, for the internal code-server login.</div>
-
-          <button class="button button-primary" type="submit">Create User Workspace</button>
-        </form>
-      </section>
-
-      <section class="panel">
-        <h2>Provisioned Users</h2>
-        {% if users %}
-        <div class="list">
-          {% for user in users %}
-          <article class="card">
-            <div class="card-header">
-              <div>
-                <h3>{{ user.username }}</h3>
-                <div class="user-meta">
-                  <span class="badge">{{ user.workspace_type }}</span>
-                  <span class="badge">{{ user.network_mode }}</span>
-                  <span class="badge {{ 'status-active' if user.enabled else 'status-disabled' }}">{{ 'active' if user.enabled else 'disabled' }}</span>
-                </div>
-              </div>
-              <div class="badge">{{ user.container_name }}</div>
-            </div>
-            <p>Created {{ user.created_at }} and reachable at:</p>
-            <div class="url-box">http://{{ domain }}{{ user.route_path }}</div>
-            <div class="button-row">
-              {% if user.enabled %}
-              <form method="post" action="{{ url_for('toggle_user', user_id=user.id, action='disable') }}">
-                <button class="button button-secondary" type="submit">Disable</button>
-              </form>
-              {% else %}
-              <form method="post" action="{{ url_for('toggle_user', user_id=user.id, action='enable') }}">
-                <button class="button button-primary" type="submit">Enable</button>
-              </form>
-              {% endif %}
-              <form method="post" action="{{ url_for('redeploy_user', user_id=user.id) }}">
-                <button class="button button-secondary" type="submit">Redeploy</button>
-              </form>
-              <form method="post" action="{{ url_for('delete_user', user_id=user.id) }}">
-                <button class="button button-danger" type="submit">Delete</button>
-              </form>
-            </div>
-          </article>
-          {% endfor %}
+<body data-bs-theme="light">
+  <div class="app-shell d-flex flex-column">
+    <div class="container py-4 py-lg-5 flex-grow-1">
+      <header class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3 mb-4">
+        <div>
+          <div class="text-uppercase small fw-semibold text-primary mb-2">Mobile Workspace</div>
+          <h1 class="display-6 fw-bold mb-1">Admin Console</h1>
+          <p class="text-body-secondary mb-0">Create isolated Linux workspaces with terminal or WebVNC desktop access directly from the browser.</p>
         </div>
-        {% else %}
-        <div class="empty">No workspaces have been created yet.</div>
-        {% endif %}
+        <div class="d-flex align-items-center gap-2">
+          <button class="btn btn-outline-secondary theme-toggle" type="button" id="themeToggle" aria-label="Toggle theme">
+            <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
+          </button>
+        </div>
+      </header>
+
+      <section class="glass-panel hero-card p-4 p-lg-5 mb-4">
+        <div class="row g-4 align-items-center">
+          <div class="col-lg-8">
+            <div class="hero-title fw-bold mb-3">Provision users, routes, and containers from one place.</div>
+            <p class="lead text-body-secondary mb-0">Choose terminal or desktop mode, assign a network policy, and let the panel regenerate Docker Compose and Caddy configuration automatically.</p>
+          </div>
+          <div class="col-lg-4">
+            <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
+              <span class="metric-chip fw-semibold">Host: {{ domain }}</span>
+              <span class="metric-chip fw-semibold">Timezone: {{ timezone }}</span>
+              <span class="metric-chip fw-semibold">Users: {{ users|length }}</span>
+            </div>
+          </div>
+        </div>
       </section>
+
+      <div class="row g-4">
+        <div class="col-12 col-xl-4">
+          <section class="glass-panel section-card p-4 h-100">
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <div class="rounded-circle d-inline-flex align-items-center justify-content-center bg-primary-subtle text-primary" style="width: 2.5rem; height: 2.5rem;">
+                <i class="bi bi-person-plus-fill"></i>
+              </div>
+              <div>
+                <h2 class="h4 mb-0">Create Workspace</h2>
+                <p class="text-body-secondary mb-0 small">Add a new user container and publish its route.</p>
+              </div>
+            </div>
+            {% if flash %}
+            <div class="alert {{ 'alert-danger' if flash_error else 'alert-success' }} rounded-4" role="alert">{{ flash }}</div>
+            {% endif %}
+            <form method="post" action="{{ url_for('create_user') }}">
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="username">User Name</label>
+                <input class="form-control" id="username" name="username" placeholder="ops-team" required>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="route">Route</label>
+                <input class="form-control" id="route" name="route" placeholder="ops-team" required>
+                <div class="form-text">This becomes the URL segment, for example <code>/workspaces/ops-team/</code>.</div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="workspace_type">Workspace Type</label>
+                <select class="form-select" id="workspace_type" name="workspace_type">
+                  <option value="terminal">Terminal Workspace</option>
+                  <option value="desktop">Desktop Workspace (WebVNC)</option>
+                </select>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="network_mode">Network Mode</label>
+                <select class="form-select" id="network_mode" name="network_mode">
+                  <option value="public">Internet Enabled</option>
+                  <option value="internal">Internal Only</option>
+                </select>
+              </div>
+
+              <div class="mb-4">
+                <label class="form-label fw-semibold" for="password">User Password</label>
+                <input class="form-control" id="password" name="password" type="password" required>
+                <div class="form-text">Used for Caddy access protection and, for terminal workspaces, for the internal code-server login.</div>
+              </div>
+
+              <button class="btn btn-primary w-100 py-3 fw-semibold" type="submit">
+                <i class="bi bi-rocket-takeoff-fill me-2"></i>Create User Workspace
+              </button>
+            </form>
+          </section>
+        </div>
+
+        <div class="col-12 col-xl-8">
+          <section class="glass-panel section-card p-4 h-100">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+              <div>
+                <h2 class="h4 mb-1">Provisioned Users</h2>
+                <p class="text-body-secondary mb-0">Manage active workspaces, redeploy them, or disable them without editing files manually.</p>
+              </div>
+              <div class="soft-badge fw-semibold">
+                <i class="bi bi-hdd-stack-fill me-2"></i>{{ users|length }} managed workspace{{ '' if users|length == 1 else 's' }}
+              </div>
+            </div>
+            {% if users %}
+            <div class="row g-3">
+              {% for user in users %}
+              <div class="col-12">
+                <article class="workspace-card p-4">
+                  <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+                    <div>
+                      <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                        <h3 class="h5 mb-0">{{ user.username }}</h3>
+                        <span class="soft-badge">{{ user.workspace_type }}</span>
+                        <span class="soft-badge">{{ user.network_mode }}</span>
+                        <span class="soft-badge {{ 'status-active' if user.enabled else 'status-disabled' }}">{{ 'active' if user.enabled else 'disabled' }}</span>
+                      </div>
+                      <div class="text-body-secondary small mb-3">Created {{ user.created_at }}</div>
+                      <div class="soft-badge mb-3 d-inline-flex align-items-center">
+                        <i class="bi bi-box-seam-fill me-2"></i>{{ user.container_name }}
+                      </div>
+                      <div class="url-pill px-3 py-2 d-inline-flex align-items-center">
+                        <i class="bi bi-link-45deg me-2"></i>http://{{ domain }}{{ user.route_path }}
+                      </div>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-start justify-content-lg-end gap-2">
+                      {% if user.enabled %}
+                      <form method="post" action="{{ url_for('toggle_user', user_id=user.id, action='disable') }}">
+                        <button class="btn btn-outline-secondary" type="submit">
+                          <i class="bi bi-pause-circle me-2"></i>Disable
+                        </button>
+                      </form>
+                      {% else %}
+                      <form method="post" action="{{ url_for('toggle_user', user_id=user.id, action='enable') }}">
+                        <button class="btn btn-primary" type="submit">
+                          <i class="bi bi-play-circle me-2"></i>Enable
+                        </button>
+                      </form>
+                      {% endif %}
+                      <form method="post" action="{{ url_for('redeploy_user', user_id=user.id) }}">
+                        <button class="btn btn-outline-secondary" type="submit">
+                          <i class="bi bi-arrow-repeat me-2"></i>Redeploy
+                        </button>
+                      </form>
+                      <form method="post" action="{{ url_for('delete_user', user_id=user.id) }}">
+                        <button class="btn btn-outline-danger" type="submit">
+                          <i class="bi bi-trash3 me-2"></i>Delete
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </article>
+              </div>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state p-5 text-center">
+              <div class="display-6 mb-3"><i class="bi bi-inboxes-fill"></i></div>
+              <h3 class="h5">No workspaces yet</h3>
+              <p class="text-body-secondary mb-0">Create the first user on the left to generate a route, storage path, and Docker container automatically.</p>
+            </div>
+            {% endif %}
+          </section>
+        </div>
+      </div>
     </div>
+
+    <footer class="footer-shell py-3">
+      <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 small">
+        <div>Mobile Web Console Hub v{{ version }}</div>
+        <div class="d-flex align-items-center gap-3">
+          <a class="link-secondary link-offset-2 link-underline-opacity-0 link-underline-opacity-75-hover" href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>
+          <span>&copy; {{ copyright_year }} Mobile Web Console Hub</span>
+        </div>
+      </div>
+    </footer>
   </div>
+  <script>
+    const root = document.documentElement;
+    const body = document.body;
+    const storageKey = "mwc-theme";
+    const themeIcon = document.getElementById("themeIcon");
+    const applyTheme = (theme) => {
+      body.setAttribute("data-bs-theme", theme);
+      themeIcon.className = theme === "dark" ? "bi bi-sun-fill" : "bi bi-moon-stars-fill";
+      localStorage.setItem(storageKey, theme);
+    };
+    const preferredTheme = localStorage.getItem(storageKey) || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    applyTheme(preferredTheme);
+    document.getElementById("themeToggle").addEventListener("click", () => {
+      applyTheme(body.getAttribute("data-bs-theme") === "dark" ? "light" : "dark");
+    });
+  </script>
 </body>
 </html>
 """
@@ -467,6 +547,9 @@ def index():
         users=users,
         domain=DOMAIN_OR_HOST,
         timezone=TIMEZONE,
+        version=APP_VERSION,
+        github_url=GITHUB_URL,
+        copyright_year=datetime.utcnow().year,
         **flash_data,
     )
 

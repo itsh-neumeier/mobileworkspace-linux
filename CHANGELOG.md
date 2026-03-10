@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.3.1] - 2026-03-10
+
+### Changed
+- Redesigned the admin UI with a Bootstrap-based layout
+- Added light and dark theme switching with header icons
+- Added footer metadata with application name, version, GitHub link, and copyright
+
 ## [0.3.0] - 2026-03-10
 
 ### Added
