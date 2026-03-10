@@ -8,6 +8,7 @@ services:
     environment:
       ADMIN_USER_NAME: ${ADMIN_USER_NAME:-admin}
       ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-admin}
+      ADMIN_AUTO_REPAIR: ${ADMIN_AUTO_REPAIR:-true}
       MWC_PROJECT_ROOT: /state
       MWC_USERS_FILE: /state/users/users.json
       MWC_GENERATED_COMPOSE: /state/generated/docker-compose.users.yml

@@ -8,6 +8,7 @@ services:
     environment:
       MWC_PROJECT_ROOT: /workspace
       ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-admin}
+      ADMIN_AUTO_REPAIR: ${ADMIN_AUTO_REPAIR:-true}
       MWC_USERS_FILE: /workspace/users/users.json
       MWC_GENERATED_COMPOSE: /workspace/generated/docker-compose.users.yml
       MWC_GENERATED_PROXY: /workspace/generated/nginx.users.conf

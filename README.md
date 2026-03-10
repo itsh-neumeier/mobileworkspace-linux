@@ -58,6 +58,7 @@ cp .env.example .env
 - `TIMEZONE`
 - `ADMIN_USER_NAME`
 - `ADMIN_INITIAL_PASSWORD` (default: `admin`)
+- `ADMIN_AUTO_REPAIR` (default: `true`, repairs broken bootstrap hash files automatically)
 
 3. Start the stack:
 

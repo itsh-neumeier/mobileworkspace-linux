@@ -62,6 +62,7 @@ ADMIN_HASH_FILE = Path(os.environ.get("MWC_ADMIN_HASH_FILE", PROJECT_ROOT / "boo
 ADMIN_PLAIN_FILE = Path(os.environ.get("MWC_ADMIN_PLAIN_FILE", PROJECT_ROOT / "bootstrap" / "admin-password-plain"))
 ADMIN_FORCE_CHANGE_FILE = Path(os.environ.get("MWC_ADMIN_FORCE_CHANGE_FILE", PROJECT_ROOT / "bootstrap" / "admin-force-change"))
 ADMIN_INITIAL_PASSWORD = os.environ.get("ADMIN_INITIAL_PASSWORD", "admin")
+ADMIN_AUTO_REPAIR = os.environ.get("ADMIN_AUTO_REPAIR", "true").strip().lower() in {"1", "true", "yes"}
 SESSION_SECRET_FILE = Path(os.environ.get("MWC_SESSION_SECRET_FILE", PROJECT_ROOT / "bootstrap" / "session-secret"))
 PROVISIONER_MODE = os.environ.get("MWC_PROVISIONER_MODE", "docker").strip().lower()
 PROXMOX_API_URL = os.environ.get("MWC_PROXMOX_API_URL", "").strip().rstrip("/")
@@ -774,7 +775,12 @@ def ensure_admin_credentials() -> None:
     existing_user = ADMIN_USER_FILE.read_text(encoding="utf-8").strip() if ADMIN_USER_FILE.exists() else ""
     existing_hash = ADMIN_HASH_FILE.read_text(encoding="utf-8").strip() if ADMIN_HASH_FILE.exists() else ""
     if existing_user and existing_hash:
-        return
+        # Keep existing credentials if they look valid; auto-repair only broken bootstrap state.
+        if not ADMIN_AUTO_REPAIR:
+            return
+        if passlib_bcrypt.identify(existing_hash):
+            return
+        print("Detected invalid admin hash, auto-repairing bootstrap credentials.")
 
     username = os.environ.get("ADMIN_USER_NAME", "admin").strip() or "admin"
     plain = ADMIN_INITIAL_PASSWORD

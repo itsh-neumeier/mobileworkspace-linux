@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.3] - 2026-03-10
+
+### Fixed
+- Added admin bootstrap auto-repair for invalid/corrupted password-hash files to avoid repeated manual `admin/admin` resets
+
+### Added
+- New `ADMIN_AUTO_REPAIR` environment switch (default `true`)
+
 ## [0.6.2] - 2026-03-10
 
 ### Fixed
