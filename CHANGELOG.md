@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.15] - 2026-03-10
+
+### Added
+- Admin navigation split into dedicated submenus/pages:
+  - `/admin/` dashboard overview
+  - `/admin/workspaces/` workspace provisioning and operations
+  - `/admin/users/` user overview and password reset across assigned workspaces
+  - `/admin/proxmox/` Proxmox backend settings
+- Proxmox workspace insights in workspace cards:
+  - current VM CPU/RAM stats
+  - recent Proxmox task status snippets
+
+### Changed
+- Workspace drift detection now marks stale resources as `corrupt` in UI (for missing Proxmox VMs and missing Docker containers)
+- Dashboard/user pages trigger automatic reconcile so deleted VMs are visible as broken state instead of silently stale
+
 ## [0.6.14] - 2026-03-10
 
 ### Fixed

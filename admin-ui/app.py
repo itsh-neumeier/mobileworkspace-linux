@@ -157,6 +157,17 @@ TRANSLATIONS = {
         "workspace_login_help": "Sign in with the workspace user credentials to access this workspace.",
         "invalid_workspace_credentials": "Invalid workspace credentials.",
         "workspace_not_found": "Workspace was not found or is disabled.",
+        "menu_dashboard": "Dashboard",
+        "menu_workspaces": "Workspaces",
+        "menu_users": "Users",
+        "menu_proxmox": "Proxmox",
+        "health_ok": "healthy",
+        "health_corrupt": "corrupt",
+        "vm_stats": "VM Stats",
+        "proxmox_tasks": "Recent Proxmox Tasks",
+        "user_overview": "User Overview",
+        "workspace_count": "Workspace Count",
+        "reset_user_password": "Reset User Password",
     },
     "de": {
         "product_name": "Mobile Web Console Hub",
@@ -229,6 +240,17 @@ TRANSLATIONS = {
         "workspace_login_help": "Melde dich mit den Workspace-Benutzerdaten an, um den Workspace zu öffnen.",
         "invalid_workspace_credentials": "Ungültige Workspace-Anmeldedaten.",
         "workspace_not_found": "Workspace wurde nicht gefunden oder ist deaktiviert.",
+        "menu_dashboard": "Dashboard",
+        "menu_workspaces": "Workspaces",
+        "menu_users": "Benutzer",
+        "menu_proxmox": "Proxmox",
+        "health_ok": "gesund",
+        "health_corrupt": "fehlerhaft",
+        "vm_stats": "VM Statistik",
+        "proxmox_tasks": "Letzte Proxmox Tasks",
+        "user_overview": "Benutzerübersicht",
+        "workspace_count": "Workspace Anzahl",
+        "reset_user_password": "Benutzerpasswort zurücksetzen",
     },
 }
 
@@ -391,8 +413,10 @@ PAGE_TEMPLATE = """
             <option value="en" {{ 'selected' if lang == 'en' else '' }}>🇬🇧 English</option>
             <option value="de" {{ 'selected' if lang == 'de' else '' }}>🇩🇪 Deutsch</option>
           </select>
-          <a class="btn btn-outline-secondary" href="{{ url_for('index', lang=lang) }}"><i class="bi bi-grid-1x2-fill me-2"></i>{{ tr.dashboard }}</a>
-          <a class="btn btn-outline-secondary" href="{{ url_for('proxmox_settings_page', lang=lang) }}"><i class="bi bi-hdd-network me-2"></i>Proxmox {{ tr.settings }}</a>
+          <a class="btn btn-outline-secondary" href="{{ url_for('index', lang=lang) }}"><i class="bi bi-grid-1x2-fill me-2"></i>{{ tr.menu_dashboard }}</a>
+          <a class="btn btn-outline-secondary" href="{{ url_for('workspaces_page', lang=lang) }}"><i class="bi bi-hdd-stack me-2"></i>{{ tr.menu_workspaces }}</a>
+          <a class="btn btn-outline-secondary" href="{{ url_for('admin_users_page', lang=lang) }}"><i class="bi bi-people me-2"></i>{{ tr.menu_users }}</a>
+          <a class="btn btn-outline-secondary" href="{{ url_for('proxmox_settings_page', lang=lang) }}"><i class="bi bi-hdd-network me-2"></i>{{ tr.menu_proxmox }}</a>
           <span class="soft-badge"><i class="bi bi-person-badge me-2"></i>{{ admin_username }}</span>
           <button class="btn btn-outline-secondary theme-toggle" type="button" id="themeToggle" aria-label="Toggle theme">
             <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
@@ -563,12 +587,28 @@ PAGE_TEMPLATE = """
                       <div class="soft-badge mb-3 d-inline-flex align-items-center">
                         <i class="bi bi-pc-display me-2"></i>VM {{ user.proxmox.vmid }} @ {{ user.proxmox.node }}
                       </div>
+                      <div class="soft-badge mb-3 d-inline-flex align-items-center {{ 'status-disabled' if user.workspace_health == 'corrupt' else 'status-active' }}">
+                        <i class="bi bi-heart-pulse me-2"></i>{{ tr.health_corrupt if user.workspace_health == 'corrupt' else tr.health_ok }}
+                      </div>
                       {% if user.proxmox_profile %}
                       <div class="soft-badge mb-3 d-inline-flex align-items-center">
                         <i class="bi bi-cpu me-2"></i>{{ user.proxmox_profile.cores }} vCPU · {{ user.proxmox_profile.memory_mb }} MB · {{ user.proxmox_profile.bridge }}
                       </div>
                       <div class="soft-badge mb-3 d-inline-flex align-items-center">
                         <i class="bi bi-person-circle me-2"></i>{{ user.proxmox_profile.guest_user or user.username }}
+                      </div>
+                      {% endif %}
+                      {% if user.proxmox_stats %}
+                      <div class="soft-badge mb-3 d-inline-flex align-items-center">
+                        <i class="bi bi-speedometer2 me-2"></i>{{ tr.vm_stats }}: CPU {{ user.proxmox_stats.cpu_percent }}% · RAM {{ user.proxmox_stats.mem_used_mb }}/{{ user.proxmox_stats.mem_total_mb }} MB
+                      </div>
+                      {% endif %}
+                      {% if user.proxmox_tasks %}
+                      <div class="mt-2 mb-3 small text-body-secondary">{{ tr.proxmox_tasks }}</div>
+                      <div class="d-flex flex-wrap gap-2 mb-3">
+                        {% for task in user.proxmox_tasks %}
+                        <span class="soft-badge">{{ task.type }}: {{ task.status }}</span>
+                        {% endfor %}
                       </div>
                       {% endif %}
                       <a class="url-pill px-3 py-2 d-inline-flex align-items-center text-decoration-none" href="{{ user.proxmox.access_url }}" target="_blank" rel="noopener noreferrer">
@@ -927,7 +967,9 @@ PROXMOX_SETTINGS_TEMPLATE = """
         <h1 class="h3 mb-0">Proxmox {{ tr.settings }}</h1>
       </div>
       <div class="d-flex gap-2">
-        <a class="btn btn-outline-secondary" href="{{ url_for('index', lang=lang) }}"><i class="bi bi-grid-1x2-fill me-2"></i>{{ tr.dashboard }}</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('index', lang=lang) }}"><i class="bi bi-grid-1x2-fill me-2"></i>{{ tr.menu_dashboard }}</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('workspaces_page', lang=lang) }}"><i class="bi bi-hdd-stack me-2"></i>{{ tr.menu_workspaces }}</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('admin_users_page', lang=lang) }}"><i class="bi bi-people me-2"></i>{{ tr.menu_users }}</a>
         <form method="post" action="{{ url_for('logout') }}">
           <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-box-arrow-right me-2"></i>{{ tr.logout }}</button>
         </form>
@@ -971,6 +1013,134 @@ PROXMOX_SETTINGS_TEMPLATE = """
             <button class="btn btn-outline-secondary" formaction="{{ url_for('proxmox_test') }}" formmethod="post" type="submit"><i class="bi bi-plug me-2"></i>{{ tr.proxmox_api_test }}</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+ADMIN_DASHBOARD_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tr.product_name }} - {{ tr.menu_dashboard }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-4 py-lg-5">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+      <div>
+        <div class="text-uppercase small fw-semibold text-primary">{{ tr.product_name }}</div>
+        <h1 class="h3 mb-0">{{ tr.menu_dashboard }}</h1>
+      </div>
+      <form method="post" action="{{ url_for('logout') }}">
+        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-box-arrow-right me-2"></i>{{ tr.logout }}</button>
+      </form>
+    </div>
+    {% if flash %}
+    <div class="alert {{ 'alert-danger' if flash_error else 'alert-success' }} rounded-4" role="alert">{{ flash }}</div>
+    {% endif %}
+    <div class="row g-3">
+      <div class="col-12 col-md-4">
+        <a class="card border-0 shadow-sm rounded-4 text-decoration-none text-body" href="{{ url_for('workspaces_page', lang=lang) }}">
+          <div class="card-body">
+            <div class="text-body-secondary small">{{ tr.menu_workspaces }}</div>
+            <div class="h4 mb-0">{{ users|length }}</div>
+          </div>
+        </a>
+      </div>
+      <div class="col-12 col-md-4">
+        <a class="card border-0 shadow-sm rounded-4 text-decoration-none text-body" href="{{ url_for('admin_users_page', lang=lang) }}">
+          <div class="card-body">
+            <div class="text-body-secondary small">{{ tr.menu_users }}</div>
+            <div class="h4 mb-0">{{ unique_user_count }}</div>
+          </div>
+        </a>
+      </div>
+      <div class="col-12 col-md-4">
+        <a class="card border-0 shadow-sm rounded-4 text-decoration-none text-body" href="{{ url_for('proxmox_settings_page', lang=lang) }}">
+          <div class="card-body">
+            <div class="text-body-secondary small">{{ tr.menu_proxmox }}</div>
+            <div class="h4 mb-0">{{ 'enabled' if proxmox_mode else 'disabled' }}</div>
+          </div>
+        </a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+ADMIN_USERS_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tr.product_name }} - {{ tr.menu_users }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-4 py-lg-5">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+      <div>
+        <div class="text-uppercase small fw-semibold text-primary">{{ tr.product_name }}</div>
+        <h1 class="h3 mb-0">{{ tr.menu_users }}</h1>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{{ url_for('index', lang=lang) }}"><i class="bi bi-grid-1x2-fill me-2"></i>{{ tr.menu_dashboard }}</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('workspaces_page', lang=lang) }}"><i class="bi bi-hdd-stack me-2"></i>{{ tr.menu_workspaces }}</a>
+      </div>
+    </div>
+    {% if flash %}
+    <div class="alert {{ 'alert-danger' if flash_error else 'alert-success' }} rounded-4" role="alert">{{ flash }}</div>
+    {% endif %}
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">{{ tr.reset_user_password }}</h2>
+        <form method="post" action="{{ url_for('admin_reset_user_password') }}">
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">{{ tr.username }}</label>
+              <input class="form-control" name="username" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold">{{ tr.password }}</label>
+              <input class="form-control" name="password" type="password" required>
+            </div>
+          </div>
+          <button class="btn btn-primary mt-3" type="submit">{{ tr.reset_user_password }}</button>
+        </form>
+      </div>
+    </div>
+    <div class="card border-0 shadow-sm rounded-4">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">{{ tr.user_overview }}</h2>
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead>
+              <tr>
+                <th>{{ tr.username }}</th>
+                <th>{{ tr.workspace_count }}</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in user_rows %}
+              <tr>
+                <td>{{ item.username }}</td>
+                <td>{{ item.workspace_count }}</td>
+                <td>{{ item.status_text }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -1125,6 +1295,10 @@ def reconcile_workspace_state(users: list[dict]) -> tuple[list[dict], str]:
                         info["exists"] = exists
                         info["status"] = status
                         changed = True
+                    desired_health = "ok" if exists else "corrupt"
+                    if user.get("workspace_health") != desired_health:
+                        user["workspace_health"] = desired_health
+                        changed = True
                     if exists:
                         access_url = proxmox_vm_access_url(vmid, node)
                         if info.get("access_url") != access_url:
@@ -1148,6 +1322,10 @@ def reconcile_workspace_state(users: list[dict]) -> tuple[list[dict], str]:
                 exists = user.get("container_name") in names
                 if user.get("container_exists") != exists:
                     user["container_exists"] = exists
+                    changed = True
+                desired_health = "ok" if exists else "corrupt"
+                if user.get("workspace_health") != desired_health:
+                    user["workspace_health"] = desired_health
                     changed = True
                 if not exists:
                     missing_count += 1
@@ -1634,6 +1812,65 @@ def proxmox_node_usage() -> dict:
     }
 
 
+def proxmox_vm_stats(settings: dict, node: str, vmid: int) -> dict:
+    try:
+        raw = proxmox_request("GET", f"/nodes/{node}/qemu/{vmid}/status/current", settings)
+    except Exception:
+        return {}
+    cpu = float(raw.get("cpu", 0.0)) * 100.0
+    mem = int(raw.get("mem", 0))
+    maxmem = int(raw.get("maxmem", 0))
+    return {
+        "cpu_percent": round(cpu, 1),
+        "mem_used_mb": int(mem / (1024 * 1024)),
+        "mem_total_mb": int(maxmem / (1024 * 1024)),
+    }
+
+
+def proxmox_vm_recent_tasks(settings: dict, node: str, vmid: int, limit: int = 5) -> list[dict]:
+    try:
+        raw = proxmox_request("GET", f"/nodes/{node}/tasks", settings, {"limit": limit, "vmid": vmid})
+    except Exception:
+        return []
+    items: list[dict] = []
+    if isinstance(raw, list):
+        for task in raw[:limit]:
+            if not isinstance(task, dict):
+                continue
+            items.append(
+                {
+                    "type": str(task.get("type", "task")),
+                    "status": str(task.get("status", "unknown")),
+                }
+            )
+    return items
+
+
+def enrich_proxmox_workspace_insights(users: list[dict]) -> list[dict]:
+    if not users:
+        return users
+    settings = proxmox_settings()
+    ok, _ = proxmox_ready(settings)
+    if not ok:
+        return users
+    for user in users:
+        if user.get("provider") != "proxmox_vm":
+            continue
+        info = user.get("proxmox", {})
+        try:
+            vmid = int(info.get("vmid"))
+        except Exception:
+            continue
+        node = str(info.get("node") or settings.get("node", "")).strip()
+        user["proxmox_stats"] = proxmox_vm_stats(settings, node, vmid)
+        user["proxmox_tasks"] = proxmox_vm_recent_tasks(settings, node, vmid)
+        if info.get("exists") is False:
+            user["workspace_health"] = "corrupt"
+        else:
+            user["workspace_health"] = "ok"
+    return users
+
+
 def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
     settings = proxmox_settings()
     ok, message = proxmox_ready(settings)
@@ -1793,7 +2030,7 @@ def current_flash():
     }
 
 
-def redirect_with_message(message: str, error: bool = False, endpoint: str = "index"):
+def redirect_with_message(message: str, error: bool = False, endpoint: str = "workspaces_page"):
     return redirect(url_for(endpoint, message=message, error="1" if error else "0", lang=current_lang()))
 
 
@@ -1970,6 +2207,29 @@ def index():
     lang = current_lang()
     tr = TRANSLATIONS[lang]
     users, sync_message = reconcile_workspace_state(load_users())
+    flash_data = current_flash()
+    if sync_message and not flash_data.get("flash"):
+        flash_data["flash"] = sync_message
+        flash_data["flash_error"] = False
+    unique_users = len({str(user.get("username", "")).strip() for user in users if str(user.get("username", "")).strip()})
+    return render_template_string(
+        ADMIN_DASHBOARD_TEMPLATE,
+        users=users,
+        unique_user_count=unique_users,
+        tr=tr,
+        lang=lang,
+        proxmox_mode=proxmox_enabled(),
+        **flash_data,
+    )
+
+
+@APP.route("/admin/workspaces/")
+@login_required
+def workspaces_page():
+    lang = current_lang()
+    tr = TRANSLATIONS[lang]
+    users, sync_message = reconcile_workspace_state(load_users())
+    users = enrich_proxmox_workspace_insights(users)
     users_view = []
     for user in users:
         user_copy = dict(user)
@@ -2006,6 +2266,55 @@ def index():
         copyright_year=datetime.utcnow().year,
         **flash_data,
     )
+
+
+@APP.route("/admin/users/")
+@login_required
+def admin_users_page():
+    lang = current_lang()
+    tr = TRANSLATIONS[lang]
+    users, sync_message = reconcile_workspace_state(load_users())
+    grouped: dict[str, list[dict]] = {}
+    for user in users:
+        key = str(user.get("username", "")).strip()
+        if not key:
+            continue
+        grouped.setdefault(key, []).append(user)
+    rows = []
+    for username, items in sorted(grouped.items(), key=lambda item: item[0]):
+        corrupt = any(item.get("workspace_health") == "corrupt" for item in items)
+        rows.append(
+            {
+                "username": username,
+                "workspace_count": len(items),
+                "status_text": tr["health_corrupt"] if corrupt else tr["health_ok"],
+            }
+        )
+    flash_data = current_flash()
+    if sync_message and not flash_data.get("flash"):
+        flash_data["flash"] = sync_message
+        flash_data["flash_error"] = False
+    return render_template_string(ADMIN_USERS_TEMPLATE, tr=tr, lang=lang, user_rows=rows, **flash_data)
+
+
+@APP.post("/admin/users/password")
+@login_required
+def admin_reset_user_password():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    if not username or not password:
+        return redirect_with_message("Username and password are required.", error=True, endpoint="admin_users_page")
+    users = load_users()
+    changed = 0
+    for user in users:
+        if str(user.get("username", "")).strip() == username:
+            user["password"] = password
+            user["password_hash"] = password_hash(password)
+            changed += 1
+    if changed == 0:
+        return redirect_with_message("User not found.", error=True, endpoint="admin_users_page")
+    save_users(users)
+    return redirect_with_message(f"Updated password for {changed} workspace(s).", endpoint="admin_users_page")
 
 
 @APP.route("/admin/proxmox/")
