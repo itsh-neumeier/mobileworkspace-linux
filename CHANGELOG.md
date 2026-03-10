@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.5.3] - 2026-03-10
+
+### Fixed
+- Switched nginx admin upstream handling to Docker DNS runtime resolution to avoid startup failures when the admin UI container is not yet resolvable
+
 ## [0.5.2] - 2026-03-10
 
 ### Fixed
