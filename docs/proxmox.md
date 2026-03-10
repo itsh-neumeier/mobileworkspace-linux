@@ -127,6 +127,7 @@ Notes:
 - Configure Proxmox API URL, node, token, template VMID, and TLS behavior in the admin UI backend settings panel.
 - You can create a Debian 13 cloud-init template on the Proxmox host with:
   - `sh scripts/proxmox-create-debian13-template.sh --vmid 9000 --name debian13-cloud-template`
+  - `curl -fsSL https://raw.githubusercontent.com/itsh-neumeier/mobileworkspace-linux/main/scripts/proxmox-create-debian13-template.sh | sh -s -- --vmid 9000 --name debian13-cloud-template`
 - In this mode, desktop workspaces are created as Proxmox VMs (clone + config + optional start).
 - User actions in the web UI map to Proxmox VM actions:
   - enable -> start

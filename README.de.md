@@ -193,6 +193,12 @@ Wenn du eine fertige Debian-13-Cloud-Init-Template-VM in Proxmox brauchst, nutze
 sh scripts/proxmox-create-debian13-template.sh --vmid 9000 --name debian13-cloud-template
 ```
 
+Direkt von GitHub auf dem Proxmox-Host:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/itsh-neumeier/mobileworkspace-linux/main/scripts/proxmox-create-debian13-template.sh | sh -s -- --vmid 9000 --name debian13-cloud-template
+```
+
 ## Optionaler Externer Proxy
 
 Wenn du den Dienst extern veröffentlichen willst, kannst du zusätzlich einen Reverse Proxy wie Zoraxy vor diesen Stack setzen.

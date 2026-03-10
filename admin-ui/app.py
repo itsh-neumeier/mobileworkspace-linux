@@ -135,6 +135,9 @@ TRANSLATIONS = {
         "vm_disk": "Disk Override",
         "vm_disk_help": "Optional Proxmox disk config value (for example local-lvm:32).",
         "vm_start_on_create": "Start VM after create",
+        "vm_guest_user": "Guest OS User",
+        "vm_guest_password": "Guest OS Password",
+        "vm_guest_password_help": "If empty, the workspace password is used for cloud-init.",
         "proxmox_backend_settings": "Proxmox Backend Settings",
         "proxmox_api_url": "API URL",
         "proxmox_node": "Node",
@@ -195,6 +198,9 @@ TRANSLATIONS = {
         "vm_disk": "Disk Override",
         "vm_disk_help": "Optionaler Proxmox-Disk-Wert (z. B. local-lvm:32).",
         "vm_start_on_create": "VM nach Erstellung starten",
+        "vm_guest_user": "Gast-OS Benutzer",
+        "vm_guest_password": "Gast-OS Passwort",
+        "vm_guest_password_help": "Wenn leer, wird das Workspace-Passwort für cloud-init genutzt.",
         "proxmox_backend_settings": "Proxmox Backend Einstellungen",
         "proxmox_api_url": "API URL",
         "proxmox_node": "Node",
@@ -521,6 +527,15 @@ PAGE_TEMPLATE = """
                     <input class="form-control" id="proxmox_disk" name="proxmox_disk" value="{{ proxmox_default_disk }}">
                     <div class="form-text">{{ tr.vm_disk_help }}</div>
                   </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold" for="proxmox_guest_user">{{ tr.vm_guest_user }}</label>
+                    <input class="form-control" id="proxmox_guest_user" name="proxmox_guest_user" placeholder="opsuser">
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold" for="proxmox_guest_password">{{ tr.vm_guest_password }}</label>
+                    <input class="form-control" id="proxmox_guest_password" name="proxmox_guest_password" type="password">
+                    <div class="form-text">{{ tr.vm_guest_password_help }}</div>
+                  </div>
                 </div>
                 <div class="form-check mt-3">
                   <input class="form-check-input" type="checkbox" value="1" id="proxmox_start_on_create" name="proxmox_start_on_create" {{ 'checked' if proxmox_default_start_on_create else '' }}>
@@ -568,6 +583,9 @@ PAGE_TEMPLATE = """
                       {% if user.proxmox_profile %}
                       <div class="soft-badge mb-3 d-inline-flex align-items-center">
                         <i class="bi bi-cpu me-2"></i>{{ user.proxmox_profile.cores }} vCPU · {{ user.proxmox_profile.memory_mb }} MB · {{ user.proxmox_profile.bridge }}
+                      </div>
+                      <div class="soft-badge mb-3 d-inline-flex align-items-center">
+                        <i class="bi bi-person-circle me-2"></i>{{ user.proxmox_profile.guest_user or user.username }}
                       </div>
                       {% endif %}
                       <div class="url-pill px-3 py-2 d-inline-flex align-items-center">
@@ -933,6 +951,17 @@ def validate_username(value: str) -> str:
     return candidate
 
 
+def guest_username(value: str, fallback: str) -> str:
+    candidate = (value or "").strip().lower()
+    if not candidate:
+        candidate = re.sub(r"[^a-z0-9_-]+", "-", fallback.strip().lower()).strip("-")
+    if not candidate:
+        candidate = "admin"
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", candidate):
+        raise ValueError("Guest OS user must be 1-32 chars and match Linux naming rules.")
+    return candidate
+
+
 def make_id(route: str, workspace_type: str) -> str:
     return f"{workspace_type}-{route}"
 
@@ -1289,11 +1318,16 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
         bridge = profile.get("bridge", settings["net_bridge"])
         disk_override = profile.get("disk", settings["vm_disk"])
         start_on_create = bool(profile.get("start_on_create", settings["vm_start_on_create"]))
+        guest_user = guest_username(str(profile.get("guest_user", "")), user.get("username", "admin"))
+        guest_password = str(profile.get("guest_password", "")).strip() or user.get("password", "admin")
 
         config_payload = {
             "cores": cores,
             "memory": memory_mb,
             "net0": f"virtio,bridge={bridge}",
+            "ciuser": guest_user,
+            "cipassword": guest_password,
+            "ipconfig0": "ip=dhcp",
             "tags": "mobileworkspace",
         }
         if disk_override:
@@ -1312,6 +1346,7 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
             "node": node,
             "name": f"mwc-{user['route']}",
             "access_url": proxmox_vm_access_url(settings, vmid, node),
+            "guest_user": guest_user,
         }
         return True, f"Proxmox VM {vmid} created."
     except Exception as exc:
@@ -1576,6 +1611,8 @@ def create_user():
         proxmox_bridge = (request.form.get("proxmox_bridge", "") or cfg["net_bridge"]).strip() or cfg["net_bridge"]
         proxmox_disk = (request.form.get("proxmox_disk", "") or "").strip()
         proxmox_start_on_create = request.form.get("proxmox_start_on_create") == "1"
+        proxmox_guest_user = guest_username(request.form.get("proxmox_guest_user", ""), username)
+        proxmox_guest_password = (request.form.get("proxmox_guest_password", "") or "").strip()
     except KeyError:
         return redirect_with_message("Required form field missing.", error=True)
     except ValueError as exc:
@@ -1610,6 +1647,8 @@ def create_user():
                 "bridge": proxmox_bridge,
                 "disk": proxmox_disk,
                 "start_on_create": proxmox_start_on_create,
+                "guest_user": proxmox_guest_user,
+                "guest_password": proxmox_guest_password,
             }
             if proxmox_enabled()
             else {}

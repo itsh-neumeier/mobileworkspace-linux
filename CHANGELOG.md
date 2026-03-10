@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.7] - 2026-03-10
+
+### Added
+- Proxmox cloud-init guest user/password fields per workspace in the Admin UI
+- Proxmox clone provisioning now sends cloud-init user/password and DHCP config to guest VMs
+- README and Proxmox docs now include direct GitHub `curl | sh` command template for template VM creation
+
 ## [0.6.6] - 2026-03-10
 
 ### Added
