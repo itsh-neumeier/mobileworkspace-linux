@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.16] - 2026-03-10
+
+### Changed
+- Client interface promoted to dedicated `/client/*` portal routes with normal login/logout and password change flow
+- Workspace creation now uses **Workspace Name** as source of truth for URL route generation (separate Route field removed to avoid confusion)
+- Workspace cards now display workspace name primarily and use current computed public URL for links
+
+### Fixed
+- Embedded nginx now proxies `/client/*` paths to the Flask app
+
 ## [0.6.15] - 2026-03-10
 
 ### Added

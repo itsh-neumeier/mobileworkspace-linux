@@ -101,6 +101,8 @@ TRANSLATIONS = {
         "create_workspace_help": "Add a new user container and publish its route.",
         "route": "Route",
         "route_help": "This becomes the URL segment, for example /workspaces/ops-team/.",
+        "workspace_name": "Workspace Name",
+        "workspace_name_help": "Used for display and URL path. The route is generated automatically.",
         "workspace_type": "Workspace Type",
         "terminal_workspace": "Terminal Workspace",
         "desktop_workspace": "Desktop Workspace (WebVNC)",
@@ -184,6 +186,8 @@ TRANSLATIONS = {
         "create_workspace_help": "Lege einen neuen Benutzercontainer an und veröffentliche seine Route.",
         "route": "Route",
         "route_help": "Wird zum URL-Segment, z. B. /workspaces/ops-team/.",
+        "workspace_name": "Workspace Name",
+        "workspace_name_help": "Wird für Anzeige und URL verwendet. Die Route wird automatisch erzeugt.",
         "workspace_type": "Workspace-Typ",
         "terminal_workspace": "Terminal Workspace",
         "desktop_workspace": "Desktop Workspace (WebVNC)",
@@ -486,9 +490,9 @@ PAGE_TEMPLATE = """
               </div>
 
               <div class="mb-3">
-                <label class="form-label fw-semibold" for="route">{{ tr.route }}</label>
-                <input class="form-control" id="route" name="route" placeholder="ops-team" required>
-                <div class="form-text">{{ tr.route_help }}</div>
+                <label class="form-label fw-semibold" for="workspace_name">{{ tr.workspace_name }}</label>
+                <input class="form-control" id="workspace_name" name="workspace_name" placeholder="Operations Team" required>
+                <div class="form-text">{{ tr.workspace_name_help }}</div>
               </div>
 
               <div class="mb-3">
@@ -577,7 +581,7 @@ PAGE_TEMPLATE = """
                   <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
                     <div>
                       <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-                        <h3 class="h5 mb-0">{{ user.username }}</h3>
+                        <h3 class="h5 mb-0">{{ user.workspace_name or user.username }}</h3>
                         <span class="soft-badge">{{ user.workspace_type }}</span>
                         <span class="soft-badge">{{ user.network_mode }}</span>
                         <span class="soft-badge {{ 'status-active' if user.enabled else 'status-disabled' }}">{{ 'active' if user.enabled else 'disabled' }}</span>
@@ -923,19 +927,25 @@ USER_DASHBOARD_TEMPLATE = """
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
         <div class="text-uppercase small fw-semibold text-primary">{{ tr.product_name }}</div>
-        <h1 class="h3 mb-0">{{ session_user }}</h1>
+        <h1 class="h3 mb-0">Client Portal · {{ session_user }}</h1>
       </div>
-      <form method="post" action="{{ url_for('user_logout', lang=lang) }}">
-        <button class="btn btn-outline-secondary" type="submit">{{ tr.logout }}</button>
-      </form>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{{ url_for('user_change_password', lang=lang) }}">{{ tr.update_password }}</a>
+        <form method="post" action="{{ url_for('user_logout', lang=lang) }}">
+          <button class="btn btn-outline-secondary" type="submit">{{ tr.logout }}</button>
+        </form>
+      </div>
     </div>
+    {% if flash %}
+    <div class="alert {{ 'alert-danger' if flash_error else 'alert-success' }} rounded-4" role="alert">{{ flash }}</div>
+    {% endif %}
     <div class="row g-3">
       {% for user in users %}
       <div class="col-12">
         <div class="card border-0 shadow-sm rounded-4">
           <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
             <div>
-              <div class="fw-semibold">{{ user.route_path }}</div>
+              <div class="fw-semibold">{{ user.workspace_name or user.route_path }}</div>
               <div class="text-body-secondary small">{{ user.workspace_type }} · {{ user.network_mode }}</div>
             </div>
             <a class="btn btn-primary" href="{{ user.public_url }}" target="_blank" rel="noopener noreferrer">{{ tr.open_workspace }}</a>
@@ -943,6 +953,48 @@ USER_DASHBOARD_TEMPLATE = """
         </div>
       </div>
       {% endfor %}
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+USER_CHANGE_PASSWORD_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tr.product_name }} - {{ tr.update_password }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <div class="card border-0 shadow-sm rounded-4 mx-auto" style="max-width: 620px;">
+      <div class="card-body p-4 p-lg-5">
+        <h1 class="h4 mb-3">{{ tr.update_password }}</h1>
+        {% if error %}
+        <div class="alert alert-danger rounded-4" role="alert">{{ error }}</div>
+        {% endif %}
+        <form method="post" action="{{ url_for('user_change_password', lang=lang) }}">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">{{ tr.current_password }}</label>
+            <input class="form-control" name="current_password" type="password" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">{{ tr.new_password }}</label>
+            <input class="form-control" name="new_password" type="password" required minlength="8">
+          </div>
+          <div class="mb-4">
+            <label class="form-label fw-semibold">{{ tr.confirm_new_password }}</label>
+            <input class="form-control" name="confirm_password" type="password" required minlength="8">
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" type="submit">{{ tr.update_password }}</button>
+            <a class="btn btn-outline-secondary" href="{{ url_for('user_dashboard', lang=lang) }}">{{ tr.menu_workspaces }}</a>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 </body>
@@ -1439,7 +1491,7 @@ def nginx_block(user: dict) -> str:
     return f"""
 location ^~ {route}/ {{
     auth_request /user/auth/{user["route"]}/;
-    error_page 401 =302 /user/login/?next=$request_uri;
+    error_page 401 =302 /client/login/?next=$request_uri;
     set $workspace_upstream http://{user["container_name"]}:{upstream_port(user)};
     proxy_pass $workspace_upstream;
     proxy_http_version 1.1;
@@ -1957,10 +2009,14 @@ def proxmox_delete_vm(user: dict) -> tuple[bool, str]:
     node = info.get("node") or settings.get("node", "")
     if not vmid:
         return True, "No Proxmox VM linked."
+    def vm_missing_error(message: str) -> bool:
+        lowered = message.lower()
+        return "http 404" in lowered or "does not exist" in lowered or "not exist" in lowered
+
     try:
         proxmox_request("GET", f"/nodes/{node}/qemu/{vmid}/status/current", settings)
     except Exception as exc:
-        if "HTTP 404" in str(exc):
+        if vm_missing_error(str(exc)):
             return True, f"VM {vmid} already absent."
         return False, f"Proxmox VM pre-delete check failed: {exc}"
     try:
@@ -1971,7 +2027,7 @@ def proxmox_delete_vm(user: dict) -> tuple[bool, str]:
         proxmox_request_retry("DELETE", f"/nodes/{node}/qemu/{vmid}", settings, None)
         return True, f"VM {vmid} deleted."
     except Exception as exc:
-        if "HTTP 404" in str(exc):
+        if vm_missing_error(str(exc)):
             return True, f"VM {vmid} already absent."
         return False, f"Proxmox VM delete failed: {exc}"
 
@@ -2065,9 +2121,10 @@ def workspace_public_url(user: dict) -> str:
 
 @APP.route("/")
 def root():
-    return redirect("/user/login/")
+    return redirect("/client/login/")
 
 
+@APP.route("/client/login/", methods=["GET", "POST"])
 @APP.route("/user/login/", methods=["GET", "POST"])
 def user_login():
     lang = current_lang()
@@ -2093,6 +2150,7 @@ def user_login():
     return render_template_string(USER_LOGIN_TEMPLATE, tr=tr, lang=lang, error=error)
 
 
+@APP.post("/client/logout/")
 @APP.post("/user/logout/")
 def user_logout():
     workspace_keys = [key for key in session.keys() if key.startswith("workspace_auth_")]
@@ -2103,6 +2161,7 @@ def user_logout():
     return redirect(url_for("user_login", lang=current_lang()))
 
 
+@APP.route("/client/")
 @APP.route("/user/")
 def user_dashboard():
     lang = current_lang()
@@ -2118,6 +2177,44 @@ def user_dashboard():
         user_copy["public_url"] = workspace_public_url(user)
         users_view.append(user_copy)
     return render_template_string(USER_DASHBOARD_TEMPLATE, tr=tr, lang=lang, users=users_view, session_user=username)
+
+
+@APP.route("/client/change-password/", methods=["GET", "POST"])
+@APP.route("/user/change-password/", methods=["GET", "POST"])
+def user_change_password():
+    lang = current_lang()
+    tr = TRANSLATIONS[lang]
+    if not session.get("user_authenticated"):
+        return redirect(url_for("user_login", lang=lang, next=request.path))
+    username = str(session.get("workspace_username", "")).strip()
+    error = ""
+    if request.method == "POST":
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        users = user_workspaces_by_name(load_users(), username)
+        if not users:
+            return redirect(url_for("user_login", lang=lang))
+        if not any(verify_workspace_auth(user, username, current_password) for user in users):
+            error = "Current password is incorrect."
+        elif len(new_password) < 8:
+            error = "New password must be at least 8 characters."
+        elif new_password != confirm_password:
+            error = "New passwords do not match."
+        else:
+            all_users = load_users()
+            changed = 0
+            for user in all_users:
+                if str(user.get("username", "")).strip() == username:
+                    user["password"] = new_password
+                    user["password_hash"] = password_hash(new_password)
+                    changed += 1
+            save_users(all_users)
+            return redirect_with_message(
+                f"Password updated for {changed} workspace(s).",
+                endpoint="user_dashboard",
+            )
+    return render_template_string(USER_CHANGE_PASSWORD_TEMPLATE, tr=tr, lang=lang, error=error)
 
 
 @APP.route("/user/auth/<route>/")
@@ -2388,7 +2485,8 @@ def create_user():
     cfg = proxmox_settings()
     try:
         username = validate_username(request.form["username"])
-        route = slugify(request.form["route"])
+        workspace_name = request.form.get("workspace_name", "").strip() or request.form.get("route", "").strip()
+        route = slugify(workspace_name)
         workspace_type = request.form["workspace_type"]
         network_mode = request.form["network_mode"]
         password = request.form["password"]
@@ -2424,6 +2522,7 @@ def create_user():
     user = {
         "id": make_id(route, workspace_type),
         "username": username,
+        "workspace_name": workspace_name,
         "route": route,
         "route_path": f"/workspaces/{route}/",
         "workspace_type": workspace_type,
