@@ -26,6 +26,8 @@ TIMEZONE = os.environ.get("MWC_TIMEZONE", "Europe/Berlin")
 VERSION_FILE = PROJECT_ROOT / "VERSION"
 APP_VERSION = VERSION_FILE.read_text(encoding="utf-8").strip() if VERSION_FILE.exists() else "dev"
 GITHUB_URL = "https://github.com/itsh-neumeier/mobileworkspace-linux"
+COMPANY_NAME = "ITSH Neumeier"
+COMPANY_URL = "https://neumeier.cloud"
 EDGE_NETWORK = os.environ.get("MWC_EDGE_NETWORK", "mobileworkspace_edge")
 PUBLIC_NETWORK = os.environ.get("MWC_PUBLIC_NETWORK", "mobileworkspace_public_net")
 INTERNAL_NETWORK = os.environ.get("MWC_INTERNAL_NETWORK", "mobileworkspace_internal_net")
@@ -448,8 +450,9 @@ PAGE_TEMPLATE = """
       <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 small">
         <div>{{ tr.product_name }} v{{ version }}</div>
         <div class="d-flex align-items-center gap-3">
+          <a class="link-secondary link-offset-2 link-underline-opacity-0 link-underline-opacity-75-hover" href="{{ company_url }}" target="_blank" rel="noopener">neumeier.cloud</a>
           <a class="link-secondary link-offset-2 link-underline-opacity-0 link-underline-opacity-75-hover" href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>
-          <span>&copy; {{ copyright_year }} Mobile Web Console Hub</span>
+          <span>&copy; {{ copyright_year }} {{ company_name }}</span>
         </div>
       </div>
     </footer>
@@ -547,7 +550,10 @@ LOGIN_TEMPLATE = """
       </button>
     </form>
     <div class="mt-4 text-center text-body-secondary small">
-      {{ tr.product_name }} v{{ version }}
+      {{ tr.product_name }} v{{ version }} ·
+      <a class="link-secondary text-decoration-none" href="{{ company_url }}" target="_blank" rel="noopener">neumeier.cloud</a> ·
+      <a class="link-secondary text-decoration-none" href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a> ·
+      &copy; {{ copyright_year }} {{ company_name }}
     </div>
   </div>
   <script>
@@ -615,6 +621,12 @@ CHANGE_PASSWORD_TEMPLATE = """
       </div>
       <button class="btn btn-primary btn-lg w-100 rounded-pill" type="submit">{{ tr.update_password }}</button>
     </form>
+    <div class="mt-4 text-center text-body-secondary small">
+      {{ tr.product_name }} v{{ version }} ·
+      <a class="link-secondary text-decoration-none" href="{{ company_url }}" target="_blank" rel="noopener">neumeier.cloud</a> ·
+      <a class="link-secondary text-decoration-none" href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a> ·
+      &copy; {{ copyright_year }} {{ company_name }}
+    </div>
   </div>
   <script>
     document.getElementById("langSelect").addEventListener("change", (e) => {
@@ -969,7 +981,17 @@ def login():
             next_url = request.args.get("next") or url_for("index", lang=lang)
             return redirect(next_url)
         error = "Invalid credentials."
-    return render_template_string(LOGIN_TEMPLATE, error=error, version=APP_VERSION, tr=tr, lang=lang)
+    return render_template_string(
+        LOGIN_TEMPLATE,
+        error=error,
+        version=APP_VERSION,
+        tr=tr,
+        lang=lang,
+        github_url=GITHUB_URL,
+        company_name=COMPANY_NAME,
+        company_url=COMPANY_URL,
+        copyright_year=datetime.utcnow().year,
+    )
 
 
 @APP.post("/logout/")
@@ -1000,7 +1022,17 @@ def change_password():
             ADMIN_PLAIN_FILE.write_text("", encoding="utf-8")
             ADMIN_FORCE_CHANGE_FILE.write_text("0", encoding="utf-8")
             return redirect_with_message("Admin password changed successfully.")
-    return render_template_string(CHANGE_PASSWORD_TEMPLATE, error=error, tr=tr, lang=lang)
+    return render_template_string(
+        CHANGE_PASSWORD_TEMPLATE,
+        error=error,
+        tr=tr,
+        lang=lang,
+        version=APP_VERSION,
+        github_url=GITHUB_URL,
+        company_name=COMPANY_NAME,
+        company_url=COMPANY_URL,
+        copyright_year=datetime.utcnow().year,
+    )
 
 
 @APP.route("/admin/")
@@ -1019,6 +1051,8 @@ def index():
         timezone=TIMEZONE,
         version=APP_VERSION,
         github_url=GITHUB_URL,
+        company_name=COMPANY_NAME,
+        company_url=COMPANY_URL,
         admin_username=session.get("admin_username", "admin"),
         copyright_year=datetime.utcnow().year,
         **flash_data,

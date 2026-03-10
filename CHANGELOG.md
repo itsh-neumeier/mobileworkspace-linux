@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.5.11] - 2026-03-10
+
+### Changed
+- Updated footer branding to `ITSH Neumeier` with `neumeier.cloud` and GitHub links
+- Applied consistent footer metadata to login, password-change, and admin dashboard pages
+
 ## [0.5.10] - 2026-03-10
 
 ### Changed
