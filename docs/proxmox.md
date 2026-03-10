@@ -42,6 +42,8 @@ Increase RAM if several desktop users will be active at the same time.
 7. Start the stack with `docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d`.
 8. Open `/admin/` and create user workspaces from the web UI.
 
+If you prefer Portainer, use `docker-compose.portainer.yml` in the stack editor instead of the repo-oriented Compose file. That variant is designed to avoid relative file mounts.
+
 If you want to pin a specific published image version:
 
 ```bash
@@ -72,10 +74,11 @@ For internal-only access:
 
 Persisted user data is stored under:
 
-- `/path/to/repo/data/<route>/`
 - `/path/to/repo/users/users.json`
 - `/path/to/repo/generated/docker-compose.users.yml`
 - `/path/to/repo/generated/Caddy.users`
+
+For the Portainer-compatible stack, state lives primarily in Docker named volumes instead of repo-relative paths.
 
 In Proxmox, you can protect these with:
 

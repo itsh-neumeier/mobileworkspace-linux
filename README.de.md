@@ -79,9 +79,10 @@ docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
 
 ## Compose-Dateien
 
-- `docker-compose.yml`: Basis-Compose-Datei
+- `docker-compose.yml`: Standard-Deployment per Docker Compose aus einem ausgecheckten Repo
 - `docker-compose.ghcr.yml`: explizite GHCR-Variante für die Admin-WebUI
 - `docker-compose.build.yml`: Build-Override für lokale Entwicklung
+- `docker-compose.portainer.yml`: Portainer-kompatibler Stack ohne lokale Datei-Bind-Mounts
 
 Für Proxmox oder andere Server-Deployments ist die GHCR-Variante in der Regel die bessere Wahl:
 
@@ -107,6 +108,32 @@ Für lokale Entwicklungs-Builds statt GHCR:
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
+## Portainer-Deployment
+
+Wenn du das Projekt über den Portainer-Stack-Editor deployen willst, verwende:
+
+- `docker-compose.portainer.yml`
+
+Diese Variante vermeidet die lokalen Bind-Mounts, die in Portainer scheitern, wenn Dateien wie `Caddyfile` auf dem vom Stack-Editor verwendeten Host-Pfad nicht vorhanden sind.
+
+Empfohlene Portainer-Umgebungsvariablen:
+
+- `DOMAIN_OR_HOST`
+- `TIMEZONE`
+- `ADMIN_USER_NAME`
+- `ADMIN_USER_PASSWORD_HASH`
+- `ADMIN_UI_IMAGE_TAG`
+- `MWC_EDGE_NETWORK`
+- `MWC_PUBLIC_NETWORK`
+- `MWC_INTERNAL_NETWORK`
+
+Verhalten des Portainer-Stacks:
+
+- Caddy erzeugt seine Basiskonfiguration beim Start im Container selbst
+- Benutzerregister und generierte Konfiguration liegen in einem benannten Docker-Volume
+- die Admin-WebUI provisioniert Benutzercontainer über den Docker-Socket
+- Benutzer-Workspaces verwenden benannte Docker-Volumes statt relativer Host-Pfade
+
 Die Admin-WebUI erzeugt anschließend Routen wie:
 
 - `http://DEIN_HOST/workspaces/ops/`
@@ -127,7 +154,7 @@ Jeder angelegte Benutzer erhält:
 
 - einen isolierten Container
 - eine generierte Caddy-Route
-- persistenten Speicher unter `data/<route>/`
+- persistente Docker-Volumes für Konfiguration und Workspace-Daten
 - Zugriffsschutz per Caddy Basic Auth
 
 Bei Terminal-Workspaces wird dasselbe Passwort zusätzlich für den internen `code-server`-Login verwendet.

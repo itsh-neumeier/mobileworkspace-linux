@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.4.0] - 2026-03-10
+
+### Added
+- Portainer-compatible stack file without host file bind mounts
+- Named-volume based provisioning for user workspace data
+- Portainer deployment documentation and environment guidance
+
+### Changed
+- User workspace provisioning now uses generated named Docker volumes instead of relative host paths
+- Admin-generated user stacks now rely on external named networks and explicit Caddy reloads
+
 ## [0.3.1] - 2026-03-10
 
 ### Changed

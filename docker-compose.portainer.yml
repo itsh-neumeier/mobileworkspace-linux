@@ -1,0 +1,126 @@
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: mobileworkspace-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      DOMAIN_OR_HOST: ${DOMAIN_OR_HOST}
+      ADMIN_USER_NAME: ${ADMIN_USER_NAME}
+      ADMIN_USER_PASSWORD_HASH: ${ADMIN_USER_PASSWORD_HASH}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /state/generated
+        if [ ! -f /state/generated/Caddy.users ]; then
+          printf '# Generated routes for user workspaces will be written here by the admin UI.\n' > /state/generated/Caddy.users
+        fi
+        cat <<'EOF' > /etc/caddy/Caddyfile
+        {$DOMAIN_OR_HOST} {
+        	handle_path /admin/* {
+        		basicauth {
+        			{$ADMIN_USER_NAME} {$ADMIN_USER_PASSWORD_HASH}
+        		}
+        		reverse_proxy admin-ui:8080
+        	}
+
+        	import /state/generated/Caddy.users
+
+        	handle {
+        		respond <<HTML
+        <!doctype html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Mobile Web Console Hub</title>
+          <style>
+            body {
+              margin: 0;
+              min-height: 100vh;
+              display: grid;
+              place-items: center;
+              background: linear-gradient(160deg, #081222 0%, #12213a 100%);
+              color: #f8fafc;
+              font-family: "Segoe UI", sans-serif;
+              padding: 24px;
+            }
+            main {
+              width: min(720px, 100%);
+              padding: 32px;
+              border-radius: 24px;
+              background: rgba(255, 255, 255, 0.08);
+              border: 1px solid rgba(255, 255, 255, 0.14);
+              backdrop-filter: blur(14px);
+            }
+            a {
+              display: inline-flex;
+              margin-top: 18px;
+              padding: 12px 18px;
+              border-radius: 999px;
+              background: #7cc4ff;
+              color: #081222;
+              text-decoration: none;
+              font-weight: 700;
+            }
+          </style>
+        </head>
+        <body>
+          <main>
+            <h1>Mobile Web Console Hub</h1>
+            <p>This instance is managed through the admin panel. Use the web UI to create terminal or desktop workspaces for your users.</p>
+            <a href="/admin/">Open Admin Panel</a>
+          </main>
+        </body>
+        </html>
+        HTML 200
+        	}
+        }
+        EOF
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    volumes:
+      - mwc_state:/state
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - admin-ui
+    networks:
+      - edge
+
+  admin-ui:
+    image: ghcr.io/itsh-neumeier/mobileworkspace-linux/admin-ui:${ADMIN_UI_IMAGE_TAG:-latest}
+    container_name: mobileworkspace-admin-ui
+    restart: unless-stopped
+    environment:
+      MWC_PROJECT_ROOT: /state
+      MWC_USERS_FILE: /state/users/users.json
+      MWC_GENERATED_COMPOSE: /state/generated/docker-compose.users.yml
+      MWC_GENERATED_CADDY: /state/generated/Caddy.users
+      MWC_BASE_COMPOSE: /state/base/docker-compose.base.yml
+      MWC_DOMAIN_OR_HOST: ${DOMAIN_OR_HOST}
+      MWC_TIMEZONE: ${TIMEZONE:-Europe/Berlin}
+      MWC_EDGE_NETWORK: ${MWC_EDGE_NETWORK:-mobileworkspace_edge}
+      MWC_PUBLIC_NETWORK: ${MWC_PUBLIC_NETWORK:-mobileworkspace_public_net}
+      MWC_INTERNAL_NETWORK: ${MWC_INTERNAL_NETWORK:-mobileworkspace_internal_net}
+      MWC_CADDY_CONTAINER_NAME: mobileworkspace-caddy
+    volumes:
+      - mwc_state:/state
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - edge
+
+networks:
+  edge:
+    name: ${MWC_EDGE_NETWORK:-mobileworkspace_edge}
+  public_net:
+    name: ${MWC_PUBLIC_NETWORK:-mobileworkspace_public_net}
+  internal_net:
+    name: ${MWC_INTERNAL_NETWORK:-mobileworkspace_internal_net}
+    internal: true
+
+volumes:
+  mwc_state:
+  caddy_data:
+  caddy_config:

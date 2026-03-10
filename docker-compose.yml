@@ -1,6 +1,7 @@
 services:
   caddy:
     image: caddy:2.8-alpine
+    container_name: mobileworkspace-caddy
     restart: unless-stopped
     ports:
       - "80:80"
@@ -27,8 +28,13 @@ services:
       MWC_USERS_FILE: /workspace/users/users.json
       MWC_GENERATED_COMPOSE: /workspace/generated/docker-compose.users.yml
       MWC_GENERATED_CADDY: /workspace/generated/Caddy.users
+      MWC_BASE_COMPOSE: /workspace/base/docker-compose.base.yml
       MWC_DOMAIN_OR_HOST: ${DOMAIN_OR_HOST}
       MWC_TIMEZONE: ${TIMEZONE:-Europe/Berlin}
+      MWC_EDGE_NETWORK: ${MWC_EDGE_NETWORK:-mobileworkspace_edge}
+      MWC_PUBLIC_NETWORK: ${MWC_PUBLIC_NETWORK:-mobileworkspace_public_net}
+      MWC_INTERNAL_NETWORK: ${MWC_INTERNAL_NETWORK:-mobileworkspace_internal_net}
+      MWC_CADDY_CONTAINER_NAME: mobileworkspace-caddy
     volumes:
       - ./:/workspace
       - /var/run/docker.sock:/var/run/docker.sock
@@ -37,8 +43,11 @@ services:
 
 networks:
   edge:
+    name: ${MWC_EDGE_NETWORK:-mobileworkspace_edge}
   public_net:
+    name: ${MWC_PUBLIC_NETWORK:-mobileworkspace_public_net}
   internal_net:
+    name: ${MWC_INTERNAL_NETWORK:-mobileworkspace_internal_net}
     internal: true
 
 volumes:

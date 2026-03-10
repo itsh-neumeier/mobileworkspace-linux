@@ -79,9 +79,10 @@ docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
 
 ## Compose Files
 
-- `docker-compose.yml`: local build of the admin UI
+- `docker-compose.yml`: standard Docker Compose deployment from a checked-out repo
 - `docker-compose.ghcr.yml`: explicit GHCR deployment variant
 - `docker-compose.build.yml`: local build override for development
+- `docker-compose.portainer.yml`: Portainer-compatible stack without local file bind mounts
 
 For Proxmox or other server deployments, the GHCR variant is usually the better fit:
 
@@ -107,6 +108,32 @@ For local development builds instead of GHCR:
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
+## Portainer Deployment
+
+If you want to deploy this through the Portainer stack editor, use:
+
+- `docker-compose.portainer.yml`
+
+This variant avoids the local bind mounts that fail in Portainer when files such as `Caddyfile` are not present on the host path used by the stack editor.
+
+Recommended Portainer environment variables:
+
+- `DOMAIN_OR_HOST`
+- `TIMEZONE`
+- `ADMIN_USER_NAME`
+- `ADMIN_USER_PASSWORD_HASH`
+- `ADMIN_UI_IMAGE_TAG`
+- `MWC_EDGE_NETWORK`
+- `MWC_PUBLIC_NETWORK`
+- `MWC_INTERNAL_NETWORK`
+
+Portainer stack behavior:
+
+- Caddy builds its base config inside the container at startup
+- user registry and generated config are stored in a named volume
+- the admin UI provisions user containers through the Docker socket
+- user workspaces use named Docker volumes instead of relative host paths
+
 The admin panel will then create routes such as:
 
 - `http://YOUR_HOST/workspaces/ops/`
@@ -127,7 +154,7 @@ Each created user gets:
 
 - an isolated container
 - a generated Caddy route
-- persistent storage under `data/<route>/`
+- persistent Docker volumes for config and workspace data
 - access protection through Caddy basic auth
 
 For terminal workspaces, the same password is also used for the internal `code-server` login.

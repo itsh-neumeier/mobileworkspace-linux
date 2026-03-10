@@ -15,12 +15,17 @@ GENERATED_COMPOSE = Path(
     os.environ.get("MWC_GENERATED_COMPOSE", PROJECT_ROOT / "generated" / "docker-compose.users.yml")
 )
 GENERATED_CADDY = Path(os.environ.get("MWC_GENERATED_CADDY", PROJECT_ROOT / "generated" / "Caddy.users"))
+BASE_COMPOSE = Path(os.environ.get("MWC_BASE_COMPOSE", PROJECT_ROOT / "base" / "docker-compose.base.yml"))
 DOMAIN_OR_HOST = os.environ.get("MWC_DOMAIN_OR_HOST", "localhost")
 TIMEZONE = os.environ.get("MWC_TIMEZONE", "Europe/Berlin")
-BASE_COMPOSE = PROJECT_ROOT / "docker-compose.yml"
 VERSION_FILE = PROJECT_ROOT / "VERSION"
 APP_VERSION = VERSION_FILE.read_text(encoding="utf-8").strip() if VERSION_FILE.exists() else "dev"
 GITHUB_URL = "https://github.com/itsh-neumeier/mobileworkspace-linux"
+EDGE_NETWORK = os.environ.get("MWC_EDGE_NETWORK", "mobileworkspace_edge")
+PUBLIC_NETWORK = os.environ.get("MWC_PUBLIC_NETWORK", "mobileworkspace_public_net")
+INTERNAL_NETWORK = os.environ.get("MWC_INTERNAL_NETWORK", "mobileworkspace_internal_net")
+USER_PROJECT = os.environ.get("MWC_USER_PROJECT", "mobileworkspace-users")
+CADDY_CONTAINER_NAME = os.environ.get("MWC_CADDY_CONTAINER_NAME", "mobileworkspace-caddy")
 
 APP = Flask(__name__)
 
@@ -365,12 +370,15 @@ PAGE_TEMPLATE = """
 def ensure_storage() -> None:
     USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
     GENERATED_COMPOSE.parent.mkdir(parents=True, exist_ok=True)
+    BASE_COMPOSE.parent.mkdir(parents=True, exist_ok=True)
     if not USERS_FILE.exists():
         USERS_FILE.write_text("[]\n", encoding="utf-8")
     if not GENERATED_COMPOSE.exists():
-        GENERATED_COMPOSE.write_text("services: {}\n", encoding="utf-8")
+        GENERATED_COMPOSE.write_text("services: {}\nvolumes: {}\n", encoding="utf-8")
     if not GENERATED_CADDY.exists():
         GENERATED_CADDY.write_text("# Generated routes for user workspaces will be written here by the admin UI.\n", encoding="utf-8")
+    if not BASE_COMPOSE.exists():
+        BASE_COMPOSE.write_text(render_base_compose(), encoding="utf-8")
 
 
 def load_users():
@@ -404,6 +412,10 @@ def make_id(route: str, workspace_type: str) -> str:
     return f"{workspace_type}-{route}"
 
 
+def volume_slug(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+
+
 def compose_service_block(user: dict) -> str:
     if user["workspace_type"] == "desktop":
         return f"""  {user["service_name"]}:
@@ -418,7 +430,7 @@ def compose_service_block(user: dict) -> str:
       SUBFOLDER: {yaml_safe(user["route_path"])}
       TITLE: {yaml_safe(f"{user['username']} Desktop")}
     volumes:
-      - ./data/{user["route"]}/config:/config
+      - {user["volumes"]["config"]}:/config
     networks:
       - edge
       - {network_name(user)}
@@ -442,8 +454,8 @@ def compose_service_block(user: dict) -> str:
       - {user["route_path"]}
       - /home/coder/project
     volumes:
-      - ./data/{user["route"]}/project:/home/coder/project
-      - ./data/{user["route"]}/config:/home/coder/.local/share/code-server
+      - {user["volumes"]["project"]}:/home/coder/project
+      - {user["volumes"]["config"]}:/home/coder/.local/share/code-server
     networks:
       - edge
       - {network_name(user)}
@@ -459,12 +471,20 @@ def network_name(user: dict) -> str:
     return "internal_net" if user["network_mode"] == "internal" else "public_net"
 
 
+def actual_network_name(network: str) -> str:
+    return {
+        "edge": EDGE_NETWORK,
+        "public_net": PUBLIC_NETWORK,
+        "internal_net": INTERNAL_NETWORK,
+    }[network]
+
+
 def caddy_block(user: dict) -> str:
     return f"""handle_path {user["route_path"]}* {{
 \tbasicauth {{
 \t\t{user["username"]} {user["password_hash"]}
 \t}}
-\treverse_proxy {user["service_name"]}:{upstream_port(user)}
+\treverse_proxy {user["container_name"]}:{upstream_port(user)}
 }}
 """
 
@@ -478,20 +498,39 @@ def write_generated_files(users) -> None:
 
     if enabled:
         compose_text = "services:\n" + "".join(compose_service_block(user) for user in enabled)
+        volume_names = sorted(
+            {
+                volume_name
+                for user in enabled
+                for volume_name in user["volumes"].values()
+            }
+        )
+        compose_text += "volumes:\n" + "".join(f"  {volume_name}: {{}}\n" for volume_name in volume_names)
         caddy_text = "".join(caddy_block(user) for user in enabled)
     else:
-        compose_text = "services: {}\n"
+        compose_text = "services: {}\nvolumes: {}\n"
         caddy_text = "# Generated routes for user workspaces will be written here by the admin UI.\n"
 
     GENERATED_COMPOSE.write_text(compose_text, encoding="utf-8")
     GENERATED_CADDY.write_text(caddy_text, encoding="utf-8")
 
 
+def render_base_compose() -> str:
+    return (
+        "services: {}\n"
+        "networks:\n"
+        f"  edge:\n    external: true\n    name: {EDGE_NETWORK}\n"
+        f"  public_net:\n    external: true\n    name: {PUBLIC_NETWORK}\n"
+        f"  internal_net:\n    external: true\n    name: {INTERNAL_NETWORK}\n"
+    )
+
+
 def deploy_stack(users) -> tuple[bool, str]:
-    enabled_services = [user["service_name"] for user in users if user.get("enabled", True)]
     command = [
         "docker",
         "compose",
+        "-p",
+        USER_PROJECT,
         "-f",
         str(BASE_COMPOSE),
         "-f",
@@ -499,9 +538,7 @@ def deploy_stack(users) -> tuple[bool, str]:
         "up",
         "-d",
         "--remove-orphans",
-        "caddy",
     ]
-    command.extend(enabled_services)
     result = subprocess.run(
         command,
         cwd=str(PROJECT_ROOT),
@@ -510,7 +547,32 @@ def deploy_stack(users) -> tuple[bool, str]:
         check=False,
     )
     output = "\n".join(part for part in [result.stdout.strip(), result.stderr.strip()] if part).strip()
-    return result.returncode == 0, output or "Stack updated."
+    if result.returncode != 0:
+        return False, output or "Stack update failed."
+
+    reload_ok, reload_output = reload_caddy()
+    merged_output = "\n".join(part for part in [output, reload_output] if part).strip()
+    return reload_ok, merged_output or "Stack updated."
+
+
+def reload_caddy() -> tuple[bool, str]:
+    command = [
+        "docker",
+        "exec",
+        CADDY_CONTAINER_NAME,
+        "caddy",
+        "reload",
+        "--config",
+        "/etc/caddy/Caddyfile",
+    ]
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = "\n".join(part for part in [result.stdout.strip(), result.stderr.strip()] if part).strip()
+    return result.returncode == 0, output or "Caddy reloaded."
 
 
 def provision(users) -> tuple[bool, str]:
@@ -589,6 +651,7 @@ def create_user():
         "enabled": True,
         "service_name": make_id(route, workspace_type),
         "container_name": f"mwc-{make_id(route, workspace_type)}",
+        "volumes": build_volume_map(route, workspace_type),
         "created_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
     }
     users.append(user)
@@ -650,6 +713,16 @@ def trim_output(output: str, limit: int = 220) -> str:
     if len(compact) <= limit:
         return compact
     return compact[: limit - 3] + "..."
+
+
+def build_volume_map(route: str, workspace_type: str) -> dict:
+    suffix = volume_slug(route)
+    volumes = {
+        "config": f"mwc-{suffix}-config",
+    }
+    if workspace_type == "terminal":
+        volumes["project"] = f"mwc-{suffix}-project"
+    return volumes
 
 
 if __name__ == "__main__":
