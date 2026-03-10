@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.14] - 2026-03-10
+
+### Fixed
+- Proxmox VM delete now handles already-missing VMs gracefully (HTTP 404 no longer blocks workspace cleanup)
+- Proxmox API request builder no longer sends form content headers on payload-less requests (prevents DELETE method errors)
+
+### Added
+- Automatic workspace reconciliation on dashboard load:
+  - Proxmox VM existence/status sync
+  - Docker container existence sync
+  - user-facing sync note when drift is detected
+
 ## [0.6.13] - 2026-03-10
 
 ### Fixed

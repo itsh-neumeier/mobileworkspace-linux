@@ -1078,6 +1078,87 @@ def save_users(users) -> None:
     USERS_FILE.write_text(json.dumps(users, indent=2) + "\n", encoding="utf-8")
 
 
+def docker_container_names() -> set[str]:
+    result = subprocess.run(
+        ["docker", "ps", "-a", "--format", "{{.Names}}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return set()
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
+def reconcile_workspace_state(users: list[dict]) -> tuple[list[dict], str]:
+    if not users:
+        return users, ""
+    changed = False
+    notes: list[str] = []
+
+    proxmox_users = [user for user in users if user.get("provider") == "proxmox_vm"]
+    if proxmox_users:
+        settings = proxmox_settings()
+        ok, message = proxmox_ready(settings)
+        if ok:
+            try:
+                vm_items = proxmox_request("GET", "/cluster/resources", settings, {"type": "vm"})
+                vm_map: dict[int, str] = {}
+                if isinstance(vm_items, list):
+                    for item in vm_items:
+                        try:
+                            vm_map[int(item.get("vmid"))] = str(item.get("status", "unknown"))
+                        except Exception:
+                            continue
+                missing_count = 0
+                for user in proxmox_users:
+                    info = user.setdefault("proxmox", {})
+                    vmid_raw = info.get("vmid")
+                    node = str(info.get("node") or settings.get("node", "")).strip()
+                    try:
+                        vmid = int(vmid_raw)
+                    except Exception:
+                        continue
+                    exists = vmid in vm_map
+                    status = vm_map.get(vmid, "missing")
+                    if info.get("exists") != exists or info.get("status") != status:
+                        info["exists"] = exists
+                        info["status"] = status
+                        changed = True
+                    if exists:
+                        access_url = proxmox_vm_access_url(vmid, node)
+                        if info.get("access_url") != access_url:
+                            info["access_url"] = access_url
+                            changed = True
+                    else:
+                        missing_count += 1
+                if missing_count:
+                    notes.append(f"Detected {missing_count} Proxmox workspace VM(s) that no longer exist.")
+            except Exception as exc:
+                notes.append(f"Proxmox sync failed: {trim_output(str(exc))}")
+        else:
+            notes.append(message)
+
+    docker_users = [user for user in users if user.get("provider", "docker") == "docker"]
+    if docker_users:
+        names = docker_container_names()
+        if names:
+            missing_count = 0
+            for user in docker_users:
+                exists = user.get("container_name") in names
+                if user.get("container_exists") != exists:
+                    user["container_exists"] = exists
+                    changed = True
+                if not exists:
+                    missing_count += 1
+            if missing_count:
+                notes.append(f"Detected {missing_count} Docker workspace container(s) missing.")
+
+    if changed:
+        save_users(users)
+    return users, " ".join(notes)
+
+
 def slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9-]+", "-", value.strip().lower())
     slug = re.sub(r"-{2,}", "-", slug).strip("-")
@@ -1411,11 +1492,13 @@ def proxmox_ready(settings: dict | None = None) -> tuple[bool, str]:
     return True, ""
 
 
-def proxmox_headers(settings: dict) -> dict:
-    return {
+def proxmox_headers(settings: dict, has_payload: bool = False) -> dict:
+    headers = {
         "Authorization": f"PVEAPIToken={settings['token_id']}={settings['token_secret']}",
-        "Content-Type": "application/x-www-form-urlencoded",
     }
+    if has_payload:
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    return headers
 
 
 def proxmox_request(method: str, path: str, settings: dict, data: dict | None = None) -> dict:
@@ -1426,7 +1509,7 @@ def proxmox_request(method: str, path: str, settings: dict, data: dict | None = 
         url=f"{settings['api_url']}/api2/json{path}",
         data=payload,
         method=method,
-        headers=proxmox_headers(settings),
+        headers=proxmox_headers(settings, has_payload=payload is not None),
     )
     context = ssl.create_default_context()
     if not settings.get("verify_tls", True):
@@ -1638,13 +1721,21 @@ def proxmox_delete_vm(user: dict) -> tuple[bool, str]:
     if not vmid:
         return True, "No Proxmox VM linked."
     try:
+        proxmox_request("GET", f"/nodes/{node}/qemu/{vmid}/status/current", settings)
+    except Exception as exc:
+        if "HTTP 404" in str(exc):
+            return True, f"VM {vmid} already absent."
+        return False, f"Proxmox VM pre-delete check failed: {exc}"
+    try:
         proxmox_request_retry("POST", f"/nodes/{node}/qemu/{vmid}/status/stop", settings, {"timeout": 30})
     except Exception:
         pass
     try:
-        proxmox_request_retry("DELETE", f"/nodes/{node}/qemu/{vmid}", settings, {"purge": 1, "destroy-unreferenced-disks": 1})
+        proxmox_request_retry("DELETE", f"/nodes/{node}/qemu/{vmid}", settings, None)
         return True, f"VM {vmid} deleted."
     except Exception as exc:
+        if "HTTP 404" in str(exc):
+            return True, f"VM {vmid} already absent."
         return False, f"Proxmox VM delete failed: {exc}"
 
 
@@ -1782,7 +1873,8 @@ def user_dashboard():
     if not session.get("user_authenticated"):
         return redirect(url_for("user_login", lang=lang, next=request.path))
     username = str(session.get("workspace_username", "")).strip()
-    users = user_workspaces_by_name(load_users(), username)
+    all_users, _ = reconcile_workspace_state(load_users())
+    users = user_workspaces_by_name(all_users, username)
     users_view = []
     for user in users:
         user_copy = dict(user)
@@ -1877,13 +1969,16 @@ def change_password():
 def index():
     lang = current_lang()
     tr = TRANSLATIONS[lang]
-    users = load_users()
+    users, sync_message = reconcile_workspace_state(load_users())
     users_view = []
     for user in users:
         user_copy = dict(user)
         user_copy["public_url"] = workspace_public_url(user)
         users_view.append(user_copy)
     flash_data = current_flash()
+    if sync_message and not flash_data.get("flash"):
+        flash_data["flash"] = sync_message
+        flash_data["flash_error"] = False
     cfg = proxmox_settings()
     ready_ok, ready_message = proxmox_health_check() if proxmox_enabled() else (False, "")
     return render_template_string(
