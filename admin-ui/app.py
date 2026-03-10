@@ -6,6 +6,7 @@ import subprocess
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
+from urllib.parse import urlencode
 
 from flask import Flask, redirect, render_template_string, request, session, url_for
 from passlib.apache import HtpasswdFile
@@ -29,13 +30,102 @@ EDGE_NETWORK = os.environ.get("MWC_EDGE_NETWORK", "mobileworkspace_edge")
 PUBLIC_NETWORK = os.environ.get("MWC_PUBLIC_NETWORK", "mobileworkspace_public_net")
 INTERNAL_NETWORK = os.environ.get("MWC_INTERNAL_NETWORK", "mobileworkspace_internal_net")
 USER_PROJECT = os.environ.get("MWC_USER_PROJECT", "mobileworkspace-users")
-PROXY_CONTAINER_NAME = os.environ.get("MWC_PROXY_CONTAINER_NAME", "mobileworkspace-proxy")
+PROXY_CONTAINER_NAME = os.environ.get("MWC_PROXY_CONTAINER_NAME", "mobileworkspace-admin-ui")
 ADMIN_USER_FILE = Path(os.environ.get("MWC_ADMIN_USER_FILE", PROJECT_ROOT / "bootstrap" / "admin-user-name"))
 ADMIN_HASH_FILE = Path(os.environ.get("MWC_ADMIN_HASH_FILE", PROJECT_ROOT / "bootstrap" / "admin-password-hash"))
 ADMIN_PLAIN_FILE = Path(os.environ.get("MWC_ADMIN_PLAIN_FILE", PROJECT_ROOT / "bootstrap" / "admin-password-plain"))
+ADMIN_FORCE_CHANGE_FILE = Path(os.environ.get("MWC_ADMIN_FORCE_CHANGE_FILE", PROJECT_ROOT / "bootstrap" / "admin-force-change"))
+ADMIN_INITIAL_PASSWORD = os.environ.get("ADMIN_INITIAL_PASSWORD", "admin")
 SESSION_SECRET_FILE = Path(os.environ.get("MWC_SESSION_SECRET_FILE", PROJECT_ROOT / "bootstrap" / "session-secret"))
 
 APP = Flask(__name__)
+SUPPORTED_LANGS = ("en", "de")
+DEFAULT_LANG = "en"
+
+TRANSLATIONS = {
+    "en": {
+        "product_name": "Mobile Web Console Hub",
+        "admin_console": "Admin Console",
+        "subtitle": "Create isolated Linux workspaces with terminal or WebVNC desktop access directly from the browser.",
+        "open_admin_panel": "Open Admin Panel",
+        "admin_login": "Admin Login",
+        "login_help": "Sign in to manage workspaces, user containers, and generated routes.",
+        "username": "User name",
+        "password": "Password",
+        "sign_in": "Sign In",
+        "logout": "Logout",
+        "create_workspace": "Create Workspace",
+        "create_workspace_help": "Add a new user container and publish its route.",
+        "route": "Route",
+        "route_help": "This becomes the URL segment, for example /workspaces/ops-team/.",
+        "workspace_type": "Workspace Type",
+        "terminal_workspace": "Terminal Workspace",
+        "desktop_workspace": "Desktop Workspace (WebVNC)",
+        "network_mode": "Network Mode",
+        "internet_enabled": "Internet Enabled",
+        "internal_only": "Internal Only",
+        "workspace_password": "User Password",
+        "workspace_password_help": "Used for workspace access protection and, for terminal workspaces, for the internal code-server login.",
+        "create_user_workspace": "Create User Workspace",
+        "provisioned_users": "Provisioned Users",
+        "managed_workspaces": "managed workspace(s)",
+        "created": "Created",
+        "disable": "Disable",
+        "enable": "Enable",
+        "redeploy": "Redeploy",
+        "delete": "Delete",
+        "no_workspaces": "No workspaces yet",
+        "no_workspaces_help": "Create the first user to generate route, storage path, and Docker container automatically.",
+        "change_initial_password": "Change Initial Password",
+        "change_initial_password_help": "For security reasons, you must set a new admin password before using the dashboard.",
+        "current_password": "Current password",
+        "new_password": "New password",
+        "confirm_new_password": "Confirm new password",
+        "update_password": "Update Password",
+        "language": "Language",
+    },
+    "de": {
+        "product_name": "Mobile Web Console Hub",
+        "admin_console": "Admin Konsole",
+        "subtitle": "Erstelle isolierte Linux-Workspaces mit Terminal oder WebVNC-Desktop direkt im Browser.",
+        "open_admin_panel": "Admin Panel öffnen",
+        "admin_login": "Admin Anmeldung",
+        "login_help": "Melde dich an, um Workspaces, Container und Routen zu verwalten.",
+        "username": "Benutzername",
+        "password": "Passwort",
+        "sign_in": "Anmelden",
+        "logout": "Abmelden",
+        "create_workspace": "Workspace erstellen",
+        "create_workspace_help": "Lege einen neuen Benutzercontainer an und veröffentliche seine Route.",
+        "route": "Route",
+        "route_help": "Wird zum URL-Segment, z. B. /workspaces/ops-team/.",
+        "workspace_type": "Workspace-Typ",
+        "terminal_workspace": "Terminal Workspace",
+        "desktop_workspace": "Desktop Workspace (WebVNC)",
+        "network_mode": "Netzwerkmodus",
+        "internet_enabled": "Internet verfügbar",
+        "internal_only": "Nur intern",
+        "workspace_password": "Benutzerpasswort",
+        "workspace_password_help": "Wird für den Workspace-Zugriff genutzt und bei Terminal-Workspaces zusätzlich für den internen code-server Login.",
+        "create_user_workspace": "Benutzer-Workspace erstellen",
+        "provisioned_users": "Bereitgestellte Benutzer",
+        "managed_workspaces": "verwaltete Workspaces",
+        "created": "Erstellt",
+        "disable": "Deaktivieren",
+        "enable": "Aktivieren",
+        "redeploy": "Neu bereitstellen",
+        "delete": "Löschen",
+        "no_workspaces": "Noch keine Workspaces",
+        "no_workspaces_help": "Erstelle den ersten Benutzer, um Route, Speicher und Container automatisch zu erzeugen.",
+        "change_initial_password": "Initiales Passwort ändern",
+        "change_initial_password_help": "Aus Sicherheitsgründen musst du zuerst ein neues Admin-Passwort setzen.",
+        "current_password": "Aktuelles Passwort",
+        "new_password": "Neues Passwort",
+        "confirm_new_password": "Neues Passwort bestätigen",
+        "update_password": "Passwort aktualisieren",
+        "language": "Sprache",
+    },
+}
 
 
 PAGE_TEMPLATE = """
@@ -187,11 +277,15 @@ PAGE_TEMPLATE = """
     <div class="container py-4 py-lg-5 flex-grow-1">
       <header class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3 mb-4">
         <div>
-          <div class="text-uppercase small fw-semibold text-primary mb-2">Mobile Workspace</div>
-          <h1 class="display-6 fw-bold mb-1">Admin Console</h1>
-          <p class="text-body-secondary mb-0">Create isolated Linux workspaces with terminal or WebVNC desktop access directly from the browser.</p>
+          <div class="text-uppercase small fw-semibold text-primary mb-2">{{ tr.product_name }}</div>
+          <h1 class="display-6 fw-bold mb-1">{{ tr.admin_console }}</h1>
+          <p class="text-body-secondary mb-0">{{ tr.subtitle }}</p>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+          <select class="form-select form-select-sm rounded-pill" id="langSelect" style="width:auto">
+            <option value="en" {{ 'selected' if lang == 'en' else '' }}>🇬🇧 English</option>
+            <option value="de" {{ 'selected' if lang == 'de' else '' }}>🇩🇪 Deutsch</option>
+          </select>
           <span class="soft-badge"><i class="bi bi-person-badge me-2"></i>{{ admin_username }}</span>
           <button class="btn btn-outline-secondary theme-toggle" type="button" id="themeToggle" aria-label="Toggle theme">
             <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
@@ -228,8 +322,8 @@ PAGE_TEMPLATE = """
                 <i class="bi bi-person-plus-fill"></i>
               </div>
               <div>
-                <h2 class="h4 mb-0">Create Workspace</h2>
-                <p class="text-body-secondary mb-0 small">Add a new user container and publish its route.</p>
+                <h2 class="h4 mb-0">{{ tr.create_workspace }}</h2>
+                <p class="text-body-secondary mb-0 small">{{ tr.create_workspace_help }}</p>
               </div>
             </div>
             {% if flash %}
@@ -237,40 +331,40 @@ PAGE_TEMPLATE = """
             {% endif %}
             <form method="post" action="{{ url_for('create_user') }}">
               <div class="mb-3">
-                <label class="form-label fw-semibold" for="username">User Name</label>
+                <label class="form-label fw-semibold" for="username">{{ tr.username }}</label>
                 <input class="form-control" id="username" name="username" placeholder="ops-team" required>
               </div>
 
               <div class="mb-3">
-                <label class="form-label fw-semibold" for="route">Route</label>
+                <label class="form-label fw-semibold" for="route">{{ tr.route }}</label>
                 <input class="form-control" id="route" name="route" placeholder="ops-team" required>
-                <div class="form-text">This becomes the URL segment, for example <code>/workspaces/ops-team/</code>.</div>
+                <div class="form-text">{{ tr.route_help }}</div>
               </div>
 
               <div class="mb-3">
-                <label class="form-label fw-semibold" for="workspace_type">Workspace Type</label>
+                <label class="form-label fw-semibold" for="workspace_type">{{ tr.workspace_type }}</label>
                 <select class="form-select" id="workspace_type" name="workspace_type">
-                  <option value="terminal">Terminal Workspace</option>
-                  <option value="desktop">Desktop Workspace (WebVNC)</option>
+                  <option value="terminal">{{ tr.terminal_workspace }}</option>
+                  <option value="desktop">{{ tr.desktop_workspace }}</option>
                 </select>
               </div>
 
               <div class="mb-3">
-                <label class="form-label fw-semibold" for="network_mode">Network Mode</label>
+                <label class="form-label fw-semibold" for="network_mode">{{ tr.network_mode }}</label>
                 <select class="form-select" id="network_mode" name="network_mode">
-                  <option value="public">Internet Enabled</option>
-                  <option value="internal">Internal Only</option>
+                  <option value="public">{{ tr.internet_enabled }}</option>
+                  <option value="internal">{{ tr.internal_only }}</option>
                 </select>
               </div>
 
               <div class="mb-4">
-                <label class="form-label fw-semibold" for="password">User Password</label>
+                <label class="form-label fw-semibold" for="password">{{ tr.workspace_password }}</label>
                 <input class="form-control" id="password" name="password" type="password" required>
-                <div class="form-text">Used for workspace access protection and, for terminal workspaces, for the internal code-server login.</div>
+                <div class="form-text">{{ tr.workspace_password_help }}</div>
               </div>
 
               <button class="btn btn-primary w-100 py-3 fw-semibold" type="submit">
-                <i class="bi bi-rocket-takeoff-fill me-2"></i>Create User Workspace
+                <i class="bi bi-rocket-takeoff-fill me-2"></i>{{ tr.create_user_workspace }}
               </button>
             </form>
           </section>
@@ -280,11 +374,11 @@ PAGE_TEMPLATE = """
           <section class="glass-panel section-card p-4 h-100">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
               <div>
-                <h2 class="h4 mb-1">Provisioned Users</h2>
+                <h2 class="h4 mb-1">{{ tr.provisioned_users }}</h2>
                 <p class="text-body-secondary mb-0">Manage active workspaces, redeploy them, or disable them without editing files manually.</p>
               </div>
               <div class="soft-badge fw-semibold">
-                <i class="bi bi-hdd-stack-fill me-2"></i>{{ users|length }} managed workspace{{ '' if users|length == 1 else 's' }}
+                <i class="bi bi-hdd-stack-fill me-2"></i>{{ users|length }} {{ tr.managed_workspaces }}
               </div>
             </div>
             {% if users %}
@@ -300,7 +394,7 @@ PAGE_TEMPLATE = """
                         <span class="soft-badge">{{ user.network_mode }}</span>
                         <span class="soft-badge {{ 'status-active' if user.enabled else 'status-disabled' }}">{{ 'active' if user.enabled else 'disabled' }}</span>
                       </div>
-                      <div class="text-body-secondary small mb-3">Created {{ user.created_at }}</div>
+                      <div class="text-body-secondary small mb-3">{{ tr.created }} {{ user.created_at }}</div>
                       <div class="soft-badge mb-3 d-inline-flex align-items-center">
                         <i class="bi bi-box-seam-fill me-2"></i>{{ user.container_name }}
                       </div>
@@ -312,24 +406,24 @@ PAGE_TEMPLATE = """
                       {% if user.enabled %}
                       <form method="post" action="{{ url_for('toggle_user', user_id=user.id, action='disable') }}">
                         <button class="btn btn-outline-secondary" type="submit">
-                          <i class="bi bi-pause-circle me-2"></i>Disable
+                          <i class="bi bi-pause-circle me-2"></i>{{ tr.disable }}
                         </button>
                       </form>
                       {% else %}
                       <form method="post" action="{{ url_for('toggle_user', user_id=user.id, action='enable') }}">
                         <button class="btn btn-primary" type="submit">
-                          <i class="bi bi-play-circle me-2"></i>Enable
+                          <i class="bi bi-play-circle me-2"></i>{{ tr.enable }}
                         </button>
                       </form>
                       {% endif %}
                       <form method="post" action="{{ url_for('redeploy_user', user_id=user.id) }}">
                         <button class="btn btn-outline-secondary" type="submit">
-                          <i class="bi bi-arrow-repeat me-2"></i>Redeploy
+                          <i class="bi bi-arrow-repeat me-2"></i>{{ tr.redeploy }}
                         </button>
                       </form>
                       <form method="post" action="{{ url_for('delete_user', user_id=user.id) }}">
                         <button class="btn btn-outline-danger" type="submit">
-                          <i class="bi bi-trash3 me-2"></i>Delete
+                          <i class="bi bi-trash3 me-2"></i>{{ tr.delete }}
                         </button>
                       </form>
                     </div>
@@ -341,8 +435,8 @@ PAGE_TEMPLATE = """
             {% else %}
             <div class="empty-state p-5 text-center">
               <div class="display-6 mb-3"><i class="bi bi-inboxes-fill"></i></div>
-              <h3 class="h5">No workspaces yet</h3>
-              <p class="text-body-secondary mb-0">Create the first user on the left to generate a route, storage path, and Docker container automatically.</p>
+              <h3 class="h5">{{ tr.no_workspaces }}</h3>
+              <p class="text-body-secondary mb-0">{{ tr.no_workspaces_help }}</p>
             </div>
             {% endif %}
           </section>
@@ -352,7 +446,7 @@ PAGE_TEMPLATE = """
 
     <footer class="footer-shell py-3">
       <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 small">
-        <div>Mobile Web Console Hub v{{ version }}</div>
+        <div>{{ tr.product_name }} v{{ version }}</div>
         <div class="d-flex align-items-center gap-3">
           <a class="link-secondary link-offset-2 link-underline-opacity-0 link-underline-opacity-75-hover" href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>
           <span>&copy; {{ copyright_year }} Mobile Web Console Hub</span>
@@ -375,6 +469,11 @@ PAGE_TEMPLATE = """
     document.getElementById("themeToggle").addEventListener("click", () => {
       applyTheme(body.getAttribute("data-bs-theme") === "dark" ? "light" : "dark");
     });
+    document.getElementById("langSelect").addEventListener("change", (e) => {
+      const url = new URL(window.location.href);
+      url.searchParams.set("lang", e.target.value);
+      window.location.href = url.toString();
+    });
   </script>
 </body>
 </html>
@@ -386,7 +485,7 @@ LOGIN_TEMPLATE = """
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mobile Web Console Hub Login</title>
+  <title>{{ tr.product_name }} - {{ tr.admin_login }}</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
@@ -419,31 +518,111 @@ LOGIN_TEMPLATE = """
         <i class="bi bi-shield-lock-fill"></i>
       </div>
       <div>
-        <div class="text-uppercase small fw-semibold text-primary">Mobile Workspace</div>
-        <h1 class="h3 mb-0">Admin Login</h1>
+    <div class="text-uppercase small fw-semibold text-primary">{{ tr.product_name }}</div>
+        <h1 class="h3 mb-0">{{ tr.admin_login }}</h1>
       </div>
     </div>
-    <p class="text-body-secondary mb-4">Sign in to manage workspaces, user containers, and generated routes.</p>
+    <p class="text-body-secondary mb-4">{{ tr.login_help }}</p>
+    <div class="mb-3">
+      <label class="form-label fw-semibold">{{ tr.language }}</label>
+      <select class="form-select rounded-4" id="langSelect">
+        <option value="en" {{ 'selected' if lang == 'en' else '' }}>🇬🇧 English</option>
+        <option value="de" {{ 'selected' if lang == 'de' else '' }}>🇩🇪 Deutsch</option>
+      </select>
+    </div>
     {% if error %}
     <div class="alert alert-danger rounded-4" role="alert">{{ error }}</div>
     {% endif %}
     <form method="post" action="{{ url_for('login') }}">
       <div class="mb-3">
-        <label class="form-label fw-semibold" for="username">User name</label>
+        <label class="form-label fw-semibold" for="username">{{ tr.username }}</label>
         <input class="form-control form-control-lg rounded-4" id="username" name="username" required autofocus>
       </div>
       <div class="mb-4">
-        <label class="form-label fw-semibold" for="password">Password</label>
+        <label class="form-label fw-semibold" for="password">{{ tr.password }}</label>
         <input class="form-control form-control-lg rounded-4" id="password" name="password" type="password" required>
       </div>
       <button class="btn btn-primary btn-lg w-100 rounded-pill" type="submit">
-        <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+        <i class="bi bi-box-arrow-in-right me-2"></i>{{ tr.sign_in }}
       </button>
     </form>
     <div class="mt-4 text-center text-body-secondary small">
-      Mobile Web Console Hub v{{ version }}
+      {{ tr.product_name }} v{{ version }}
     </div>
   </div>
+  <script>
+    document.getElementById("langSelect").addEventListener("change", (e) => {
+      const url = new URL(window.location.href);
+      url.searchParams.set("lang", e.target.value);
+      window.location.href = url.toString();
+    });
+  </script>
+</body>
+</html>
+"""
+
+CHANGE_PASSWORD_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tr.product_name }} - {{ tr.change_initial_password }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 26%), linear-gradient(180deg, #eef4ff 0%, #dfe9f8 100%);
+      font-family: "Segoe UI", sans-serif;
+    }
+    .panel {
+      width: min(520px, calc(100vw - 2rem));
+      border-radius: 1.5rem;
+      border: 0;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+      background: rgba(255,255,255,.95);
+    }
+  </style>
+</head>
+<body>
+  <div class="card panel p-4 p-lg-5">
+    <h1 class="h3 mb-2">{{ tr.change_initial_password }}</h1>
+    <p class="text-body-secondary mb-4">{{ tr.change_initial_password_help }}</p>
+    <div class="mb-3">
+      <label class="form-label fw-semibold">{{ tr.language }}</label>
+      <select class="form-select rounded-4" id="langSelect">
+        <option value="en" {{ 'selected' if lang == 'en' else '' }}>🇬🇧 English</option>
+        <option value="de" {{ 'selected' if lang == 'de' else '' }}>🇩🇪 Deutsch</option>
+      </select>
+    </div>
+    {% if error %}
+    <div class="alert alert-danger rounded-4" role="alert">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="{{ url_for('change_password') }}">
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="current_password">{{ tr.current_password }}</label>
+        <input class="form-control form-control-lg rounded-4" id="current_password" name="current_password" type="password" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="new_password">{{ tr.new_password }}</label>
+        <input class="form-control form-control-lg rounded-4" id="new_password" name="new_password" type="password" required minlength="10">
+      </div>
+      <div class="mb-4">
+        <label class="form-label fw-semibold" for="confirm_password">{{ tr.confirm_new_password }}</label>
+        <input class="form-control form-control-lg rounded-4" id="confirm_password" name="confirm_password" type="password" required minlength="10">
+      </div>
+      <button class="btn btn-primary btn-lg w-100 rounded-pill" type="submit">{{ tr.update_password }}</button>
+    </form>
+  </div>
+  <script>
+    document.getElementById("langSelect").addEventListener("change", (e) => {
+      const url = new URL(window.location.href);
+      url.searchParams.set("lang", e.target.value);
+      window.location.href = url.toString();
+    });
+  </script>
 </body>
 </html>
 """
@@ -473,18 +652,37 @@ def ensure_admin_credentials() -> None:
         return
 
     username = os.environ.get("ADMIN_USER_NAME", "admin").strip() or "admin"
-    plain = secrets.token_urlsafe(12)
+    plain = ADMIN_INITIAL_PASSWORD
     hashed = passlib_bcrypt.using(rounds=12).hash(plain)
     ADMIN_USER_FILE.write_text(username, encoding="utf-8")
     ADMIN_HASH_FILE.write_text(hashed, encoding="utf-8")
     ADMIN_PLAIN_FILE.write_text(plain, encoding="utf-8")
+    ADMIN_FORCE_CHANGE_FILE.write_text("1", encoding="utf-8")
     print("==================================================")
     print("Mobile Web Console Hub initial admin credentials")
     print(f"Username: {username}")
     print(f"Password: {plain}")
     print(f"Open: http://{DOMAIN_OR_HOST}/admin/" if DOMAIN_OR_HOST not in {":80", ""} else "Open: http://HOST/admin/")
     print("These credentials were generated on first start.")
+    print("Password change is required after the first login.")
     print("==================================================")
+
+
+def password_change_required() -> bool:
+    if not ADMIN_FORCE_CHANGE_FILE.exists():
+        return False
+    return ADMIN_FORCE_CHANGE_FILE.read_text(encoding="utf-8").strip() == "1"
+
+
+def current_lang() -> str:
+    requested = request.args.get("lang", "").strip().lower()
+    if requested in SUPPORTED_LANGS:
+        session["lang"] = requested
+        return requested
+    session_lang = str(session.get("lang", DEFAULT_LANG)).lower()
+    if session_lang in SUPPORTED_LANGS:
+        return session_lang
+    return DEFAULT_LANG
 
 
 def ensure_session_secret() -> str:
@@ -730,8 +928,11 @@ def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if session.get("admin_authenticated"):
+            if password_change_required() and request.path != "/admin/change-password/":
+                return redirect(url_for("change_password", lang=current_lang()))
             return view(*args, **kwargs)
-        return redirect(url_for("login", next=request.path))
+        query = {"next": request.path, "lang": current_lang()}
+        return redirect(url_for("login") + "?" + urlencode(query))
 
     return wrapped
 
@@ -744,7 +945,7 @@ def current_flash():
 
 
 def redirect_with_message(message: str, error: bool = False):
-    return redirect(url_for("index", message=message, error="1" if error else "0"))
+    return redirect(url_for("index", message=message, error="1" if error else "0", lang=current_lang()))
 
 
 @APP.route("/")
@@ -754,6 +955,8 @@ def root():
 
 @APP.route("/login/", methods=["GET", "POST"])
 def login():
+    lang = current_lang()
+    tr = TRANSLATIONS[lang]
     error = ""
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -761,26 +964,57 @@ def login():
         if verify_admin_auth(username, password):
             session["admin_authenticated"] = True
             session["admin_username"] = username
-            next_url = request.args.get("next") or url_for("index")
+            if password_change_required():
+                return redirect(url_for("change_password", lang=lang))
+            next_url = request.args.get("next") or url_for("index", lang=lang)
             return redirect(next_url)
         error = "Invalid credentials."
-    return render_template_string(LOGIN_TEMPLATE, error=error, version=APP_VERSION)
+    return render_template_string(LOGIN_TEMPLATE, error=error, version=APP_VERSION, tr=tr, lang=lang)
 
 
 @APP.post("/logout/")
 def logout():
     session.clear()
-    return redirect(url_for("login"))
+    return redirect(url_for("login", lang=DEFAULT_LANG))
+
+
+@APP.route("/admin/change-password/", methods=["GET", "POST"])
+@login_required
+def change_password():
+    lang = current_lang()
+    tr = TRANSLATIONS[lang]
+    error = ""
+    if request.method == "POST":
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        username = session.get("admin_username", "")
+        if not verify_admin_auth(username, current_password):
+            error = "Current password is incorrect."
+        elif len(new_password) < 10:
+            error = "New password must be at least 10 characters."
+        elif new_password != confirm_password:
+            error = "New passwords do not match."
+        else:
+            ADMIN_HASH_FILE.write_text(passlib_bcrypt.using(rounds=12).hash(new_password), encoding="utf-8")
+            ADMIN_PLAIN_FILE.write_text("", encoding="utf-8")
+            ADMIN_FORCE_CHANGE_FILE.write_text("0", encoding="utf-8")
+            return redirect_with_message("Admin password changed successfully.")
+    return render_template_string(CHANGE_PASSWORD_TEMPLATE, error=error, tr=tr, lang=lang)
 
 
 @APP.route("/admin/")
 @login_required
 def index():
+    lang = current_lang()
+    tr = TRANSLATIONS[lang]
     users = load_users()
     flash_data = current_flash()
     return render_template_string(
         PAGE_TEMPLATE,
         users=users,
+        tr=tr,
+        lang=lang,
         domain=DOMAIN_OR_HOST,
         timezone=TIMEZONE,
         version=APP_VERSION,

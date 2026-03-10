@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.5.10] - 2026-03-10
+
+### Changed
+- Merged internal nginx reverse proxy into the `admin-ui` image so deployment runs as a single container
+- Simplified standard and Portainer Compose files by removing the separate `nginx` service
+- Updated CI override to expose port `18080` directly from `admin-ui` for smoke tests
+
+## [0.5.9] - 2026-03-10
+
+### Added
+- Configurable initial admin password (`ADMIN_INITIAL_PASSWORD`, default `admin`) for first bootstrap
+- Mandatory admin password change flow after first login before dashboard access
+
 ## [0.5.8] - 2026-03-10
 
 ### Fixed

@@ -30,8 +30,7 @@ Das Projekt ist für Situationen gedacht, in denen du mit verwalteten Notebooks 
 
 ## Architektur
 
-- `nginx`: Reverse Proxy und Einstiegspunkt
-- `admin-ui`: browserbasierte Verwaltungsoberfläche mit eingebautem Admin-Login und Workspace-Provisionierung
+- `admin-ui`: browserbasierte Verwaltungsoberfläche mit eingebautem Admin-Login, Workspace-Provisionierung und integriertem nginx-Reverse-Proxy
 - `generated/docker-compose.users.yml`: generierte Service-Definitionen für aktive Benutzer
 - `generated/nginx.users.conf`: generierte Reverse-Proxy-Routen für aktive Benutzer
 - `users/users.json`: lokale Benutzerregistrierung, die zur Laufzeit von der Admin-WebUI erzeugt wird
@@ -57,6 +56,7 @@ cp .env.example .env
 - `DOMAIN_OR_HOST`
 - `TIMEZONE`
 - `ADMIN_USER_NAME`
+- `ADMIN_INITIAL_PASSWORD` (Standard: `admin`)
 
 3. Stack starten:
 
@@ -68,7 +68,7 @@ docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
 
 - `http://DEIN_HOST/admin/`
 
-5. Mit den beim ersten Start erzeugten Bootstrap-Admin-Zugangsdaten aus den `admin-ui`-Logs anmelden und dann Benutzer und Workspaces in der WebUI anlegen.
+5. Mit `ADMIN_USER_NAME` und `ADMIN_INITIAL_PASSWORD` anmelden (Standard: `admin` / `admin`). Beim ersten Login ist eine Passwortänderung verpflichtend.
 
 ## Compose-Dateien
 
@@ -114,6 +114,7 @@ Empfohlene Portainer-Umgebungsvariablen:
 - `DOMAIN_OR_HOST`
 - `TIMEZONE`
 - `ADMIN_USER_NAME`
+- `ADMIN_INITIAL_PASSWORD`
 - `ADMIN_UI_IMAGE_TAG`
 - `MWC_EDGE_NETWORK`
 - `MWC_PUBLIC_NETWORK`
@@ -121,8 +122,8 @@ Empfohlene Portainer-Umgebungsvariablen:
 
 Verhalten des Portainer-Stacks:
 
-- nginx erzeugt seine Basiskonfiguration beim Start im Container selbst
-- die Admin-WebUI erzeugt beim ersten Start einen Bootstrap-Admin und schreibt das Initialpasswort einmal in die Logs
+- der admin-ui Container erzeugt seine nginx-Basiskonfiguration beim Start selbst
+- die Admin-WebUI erzeugt den Bootstrap-Admin aus `ADMIN_USER_NAME` und `ADMIN_INITIAL_PASSWORD`
 - Benutzerregister und generierte Konfiguration liegen in einem benannten Docker-Volume
 - die Admin-WebUI provisioniert Benutzercontainer über den Docker-Socket
 - Benutzer-Workspaces verwenden benannte Docker-Volumes statt relativer Host-Pfade
@@ -132,7 +133,7 @@ Empfohlen für den ersten Start:
 - `DOMAIN_OR_HOST=:80`
 - `ADMIN_USER_NAME=admin`
 
-Nach dem ersten Start liest du das generierte Passwort in Portainer aus den Logs des Containers `mobileworkspace-admin-ui`.
+Nach dem ersten Start meldest du dich mit `ADMIN_USER_NAME` und `ADMIN_INITIAL_PASSWORD` an und setzt sofort ein neues Admin-Passwort.
 
 Die Admin-WebUI erzeugt anschließend Routen wie:
 
@@ -178,12 +179,12 @@ Wenn du den Dienst extern veröffentlichen willst, kannst du zusätzlich einen R
 Empfohlenes Modell:
 
 - Mobile Web Console Hub läuft intern per HTTP
-- nginx in diesem Projekt übernimmt `/admin/` und `/workspaces/...`
+- das integrierte nginx in diesem Projekt übernimmt `/admin/` und `/workspaces/...`
 - Zoraxy übernimmt optional öffentliche Domain, TLS und den externen Zugriff
 
 ## Standard-Netzwerkmodell
 
-- `edge`: gemeinsames Netz für nginx, Admin-WebUI und Benutzer-Workspaces
+- `edge`: gemeinsames Netz für den admin-ui Container und Benutzer-Workspaces
 - `public_net`: Docker-Bridge-Netz mit ausgehendem Internetzugang
 - `internal_net`: internes Docker-Netz ohne ausgehenden Internetzugang
 

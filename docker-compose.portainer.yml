@@ -1,108 +1,13 @@
 services:
-  nginx:
-    image: nginx:1.27-alpine
-    container_name: mobileworkspace-proxy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    command:
-      - /bin/sh
-      - -c
-      - |
-        set -eu
-        mkdir -p /state/generated /etc/nginx/conf.d
-        if [ ! -f /state/generated/nginx.users.conf ]; then
-          printf '# Generated routes for user workspaces will be written here by the admin UI.\n' > /state/generated/nginx.users.conf
-        fi
-        cat <<'EOF' > /etc/nginx/nginx.conf
-        worker_processes auto;
-        events {
-          worker_connections 1024;
-        }
-        http {
-          include /etc/nginx/mime.types;
-          default_type application/octet-stream;
-          sendfile on;
-          tcp_nopush on;
-          tcp_nodelay on;
-          keepalive_timeout 65;
-          resolver 127.0.0.11 valid=10s ipv6=off;
-
-          server {
-            listen 80 default_server;
-            server_name _;
-
-            location = / {
-              default_type text/html;
-              return 200 '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mobile Web Console Hub</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(160deg,#081222 0%,#12213a 100%);color:#f8fafc;font-family:"Segoe UI",sans-serif;padding:24px}main{width:min(720px,100%);padding:32px;border-radius:24px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(14px)}a{display:inline-flex;margin-top:18px;padding:12px 18px;border-radius:999px;background:#7cc4ff;color:#081222;text-decoration:none;font-weight:700}</style></head><body><main><h1>Mobile Web Console Hub</h1><p>This instance is managed through the admin panel. Use the web UI to create terminal or desktop workspaces for your users.</p><a href="/admin/">Open Admin Panel</a></main></body></html>';
-            }
-
-            location = /admin {
-              return 302 /admin/;
-            }
-
-            location ^~ /admin/ {
-              set $$admin_upstream http://mobileworkspace-admin-ui:8080;
-              proxy_pass $$admin_upstream;
-              proxy_http_version 1.1;
-              proxy_set_header Host $$host;
-              proxy_set_header X-Real-IP $$remote_addr;
-              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $$scheme;
-              proxy_set_header Upgrade $$http_upgrade;
-              proxy_set_header Connection "upgrade";
-            }
-
-            location = /login {
-              return 302 /login/;
-            }
-
-            location ^~ /login/ {
-              set $$admin_upstream http://mobileworkspace-admin-ui:8080;
-              proxy_pass $$admin_upstream;
-              proxy_http_version 1.1;
-              proxy_set_header Host $$host;
-              proxy_set_header X-Real-IP $$remote_addr;
-              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $$scheme;
-              proxy_set_header Upgrade $$http_upgrade;
-              proxy_set_header Connection "upgrade";
-            }
-
-            location = /logout {
-              return 302 /logout/;
-            }
-
-            location ^~ /logout/ {
-              set $$admin_upstream http://mobileworkspace-admin-ui:8080;
-              proxy_pass $$admin_upstream;
-              proxy_http_version 1.1;
-              proxy_set_header Host $$host;
-              proxy_set_header X-Real-IP $$remote_addr;
-              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $$scheme;
-              proxy_set_header Upgrade $$http_upgrade;
-              proxy_set_header Connection "upgrade";
-            }
-
-            include /state/generated/nginx.users.conf;
-          }
-        }
-        EOF
-        exec nginx -g 'daemon off;'
-    volumes:
-      - mwc_state:/state
-    depends_on:
-      - admin-ui
-    networks:
-      - edge
-
   admin-ui:
     image: ghcr.io/itsh-neumeier/mobileworkspace-linux/admin-ui:${ADMIN_UI_IMAGE_TAG:-latest}
     container_name: mobileworkspace-admin-ui
     restart: unless-stopped
+    ports:
+      - "80:80"
     environment:
       ADMIN_USER_NAME: ${ADMIN_USER_NAME:-admin}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-admin}
       MWC_PROJECT_ROOT: /state
       MWC_USERS_FILE: /state/users/users.json
       MWC_GENERATED_COMPOSE: /state/generated/docker-compose.users.yml
@@ -114,11 +19,12 @@ services:
       MWC_EDGE_NETWORK: ${MWC_EDGE_NETWORK:-mobileworkspace_edge}
       MWC_PUBLIC_NETWORK: ${MWC_PUBLIC_NETWORK:-mobileworkspace_public_net}
       MWC_INTERNAL_NETWORK: ${MWC_INTERNAL_NETWORK:-mobileworkspace_internal_net}
-      MWC_PROXY_CONTAINER_NAME: mobileworkspace-proxy
+      MWC_PROXY_CONTAINER_NAME: mobileworkspace-admin-ui
       MWC_USER_PROJECT: mobileworkspace-users
       MWC_ADMIN_USER_FILE: /state/bootstrap/admin-user-name
       MWC_ADMIN_HASH_FILE: /state/bootstrap/admin-password-hash
       MWC_ADMIN_PLAIN_FILE: /state/bootstrap/admin-password-plain
+      MWC_ADMIN_FORCE_CHANGE_FILE: /state/bootstrap/admin-force-change
     volumes:
       - mwc_state:/state
       - /var/run/docker.sock:/var/run/docker.sock

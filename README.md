@@ -30,8 +30,7 @@ The project is designed for situations where you work from managed notebooks or 
 
 ## Architecture
 
-- `nginx`: reverse proxy and entrypoint
-- `admin-ui`: browser-based admin panel with built-in admin login and workspace provisioning
+- `admin-ui`: browser-based admin panel with built-in admin login, workspace provisioning, and embedded nginx reverse proxy
 - `generated/docker-compose.users.yml`: generated service definitions for enabled users
 - `generated/nginx.users.conf`: generated reverse proxy routes for enabled users
 - `users/users.json`: local user registry created by the admin UI at runtime
@@ -57,6 +56,7 @@ cp .env.example .env
 - `DOMAIN_OR_HOST`
 - `TIMEZONE`
 - `ADMIN_USER_NAME`
+- `ADMIN_INITIAL_PASSWORD` (default: `admin`)
 
 3. Start the stack:
 
@@ -68,7 +68,7 @@ docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
 
 - `http://YOUR_HOST/admin/`
 
-5. Sign in with the generated bootstrap admin credentials from the `admin-ui` container logs, then create users from the web UI.
+5. Sign in with `ADMIN_USER_NAME` and `ADMIN_INITIAL_PASSWORD` (defaults: `admin` / `admin`). You will be forced to change the admin password on first login.
 
 ## Compose Files
 
@@ -114,6 +114,7 @@ Recommended Portainer environment variables:
 - `DOMAIN_OR_HOST`
 - `TIMEZONE`
 - `ADMIN_USER_NAME`
+- `ADMIN_INITIAL_PASSWORD`
 - `ADMIN_UI_IMAGE_TAG`
 - `MWC_EDGE_NETWORK`
 - `MWC_PUBLIC_NETWORK`
@@ -121,8 +122,8 @@ Recommended Portainer environment variables:
 
 Portainer stack behavior:
 
-- nginx builds its base config inside the container at startup
-- the admin UI generates a bootstrap admin account on first run and logs the initial password once
+- the admin-ui container builds its nginx base config at startup
+- the admin UI creates the bootstrap admin account from `ADMIN_USER_NAME` and `ADMIN_INITIAL_PASSWORD`
 - user registry and generated config are stored in a named volume
 - the admin UI provisions user containers through the Docker socket
 - user workspaces use named Docker volumes instead of relative host paths
@@ -132,7 +133,7 @@ Recommended for first boot:
 - `DOMAIN_OR_HOST=:80`
 - `ADMIN_USER_NAME=admin`
 
-After the first start, read the generated password from the `mobileworkspace-admin-ui` container logs in Portainer.
+After the first start, log in with `ADMIN_USER_NAME` and `ADMIN_INITIAL_PASSWORD` and immediately set a new admin password.
 
 The admin panel will then create routes such as:
 
@@ -178,12 +179,12 @@ If you want to publish the service externally, you can place another reverse pro
 Recommended setup:
 
 - Mobile Web Console Hub runs internally on plain HTTP
-- nginx inside this project handles `/admin/` and `/workspaces/...`
+- embedded nginx inside this project handles `/admin/` and `/workspaces/...`
 - Zoraxy optionally handles public DNS, TLS certificates, and internet exposure
 
 ## Default Network Model
 
-- `edge`: network shared by nginx, admin UI, and user workspaces
+- `edge`: network shared by the admin-ui container and user workspaces
 - `public_net`: Docker bridge network with outbound internet access
 - `internal_net`: Docker internal network without outbound internet access
 
