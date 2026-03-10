@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.5.4] - 2026-03-10
+
+### Fixed
+- Prevented Gunicorn worker boot failures by ensuring the session secret directory exists before writing
+- Updated generated nginx user route blocks to use `Connection "upgrade"` without depending on a map variable
+
 ## [0.5.3] - 2026-03-10
 
 ### Fixed

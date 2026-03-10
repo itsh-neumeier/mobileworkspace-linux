@@ -489,6 +489,7 @@ def ensure_admin_credentials() -> None:
 
 
 def ensure_session_secret() -> str:
+    SESSION_SECRET_FILE.parent.mkdir(parents=True, exist_ok=True)
     if SESSION_SECRET_FILE.exists():
         return SESSION_SECRET_FILE.read_text(encoding="utf-8").strip()
     secret = secrets.token_hex(32)
@@ -619,7 +620,7 @@ location ^~ {route}/ {{
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header Connection "upgrade";
 }}
 """
 
