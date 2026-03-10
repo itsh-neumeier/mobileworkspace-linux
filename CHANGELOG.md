@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.19] - 2026-03-10
+
+### Fixed
+- Extended Proxmox tunnel routing to include required noVNC/Proxmox paths (`/pve2/`, `/novnc/`, `/api2/`) in addition to `/pve/`
+- Improved proxied WebSocket/API handling for proxmox console access behind Mobile Workspace
+
 ## [0.6.18] - 2026-03-10
 
 ### Changed

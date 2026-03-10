@@ -4,7 +4,9 @@ import re
 import secrets
 import ssl
 import subprocess
+import threading
 import time
+import uuid
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -64,6 +66,7 @@ ADMIN_INITIAL_PASSWORD = os.environ.get("ADMIN_INITIAL_PASSWORD", "admin")
 ADMIN_AUTO_REPAIR = os.environ.get("ADMIN_AUTO_REPAIR", "true").strip().lower() in {"1", "true", "yes"}
 SESSION_SECRET_FILE = Path(os.environ.get("MWC_SESSION_SECRET_FILE", PROJECT_ROOT / "bootstrap" / "session-secret"))
 PROXMOX_SETTINGS_FILE = Path(os.environ.get("MWC_PROXMOX_SETTINGS_FILE", PROJECT_ROOT / "bootstrap" / "proxmox-settings.json"))
+JOBS_DIR = Path(os.environ.get("MWC_JOBS_DIR", PROJECT_ROOT / "jobs"))
 PROVISIONER_MODE_ENV = os.environ.get("MWC_PROVISIONER_MODE", "docker").strip().lower()
 PROXMOX_API_URL = os.environ.get("MWC_PROXMOX_API_URL", "").strip().rstrip("/")
 PROXMOX_NODE = os.environ.get("MWC_PROXMOX_NODE", "").strip()
@@ -172,6 +175,7 @@ TRANSLATIONS = {
         "reset_user_password": "Reset User Password",
         "workspace_list": "Workspace List",
         "create_workspace_form": "Create Workspace",
+        "provisioning_progress": "Provisioning Progress",
     },
     "de": {
         "product_name": "Mobile Web Console Hub",
@@ -259,6 +263,7 @@ TRANSLATIONS = {
         "reset_user_password": "Benutzerpasswort zurücksetzen",
         "workspace_list": "Workspace Liste",
         "create_workspace_form": "Workspace erstellen",
+        "provisioning_progress": "Bereitstellungsfortschritt",
     },
 }
 
@@ -1213,6 +1218,68 @@ ADMIN_USERS_TEMPLATE = """
 </html>
 """
 
+PROVISION_PROGRESS_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tr.product_name }} - {{ tr.provisioning_progress }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <div class="card border-0 shadow-sm rounded-4 mx-auto" style="max-width: 760px;">
+      <div class="card-body p-4 p-lg-5">
+        <h1 class="h4 mb-3">{{ tr.provisioning_progress }}</h1>
+        <div class="mb-2 small text-body-secondary">Job: <span id="jobId">{{ job_id }}</span></div>
+        <div class="mb-2 small text-body-secondary">Task: <span id="taskId">-</span></div>
+        <div class="mb-3 fw-semibold" id="statusText">Starting...</div>
+        <div class="progress mb-3" style="height: 20px;">
+          <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 5%;">5%</div>
+        </div>
+        <div class="d-flex gap-2">
+          <a class="btn btn-outline-secondary" href="{{ url_for('workspaces_page', lang=lang, view='list') }}">Back</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const statusText = document.getElementById("statusText");
+    const progressBar = document.getElementById("progressBar");
+    const taskId = document.getElementById("taskId");
+    const poll = async () => {
+      try {
+        const res = await fetch("{{ url_for('provision_job_status', job_id=job_id, lang=lang) }}", {cache: "no-store"});
+        const data = await res.json();
+        const pct = Math.max(0, Math.min(100, Number(data.progress || 0)));
+        progressBar.style.width = pct + "%";
+        progressBar.textContent = pct + "%";
+        statusText.textContent = data.message || data.state || "running";
+        taskId.textContent = data.upid || "-";
+        if (data.state === "done") {
+          progressBar.classList.remove("progress-bar-animated");
+          progressBar.classList.add("bg-success");
+          setTimeout(() => { window.location.href = "{{ url_for('workspaces_page', lang=lang, view='list', message='Workspace created as Proxmox VM.') }}"; }, 800);
+          return;
+        }
+        if (data.state === "error") {
+          progressBar.classList.remove("progress-bar-animated");
+          progressBar.classList.add("bg-danger");
+          setTimeout(() => { window.location.href = "{{ url_for('workspaces_page', lang=lang, view='create') }}&error=1&message=" + encodeURIComponent(data.message || "Provisioning failed."); }, 900);
+          return;
+        }
+      } catch (e) {
+        statusText.textContent = "Polling failed, retrying...";
+      }
+      setTimeout(poll, 1500);
+    };
+    poll();
+  </script>
+</body>
+</html>
+"""
+
 
 def ensure_storage() -> None:
     USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -1531,6 +1598,38 @@ def proxmox_tunnel_block(settings: dict) -> str:
     return f"""
 location ^~ /pve/ {{
     proxy_pass {upstream};
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify {verify_tls};
+    proxy_set_header Host {host_header};
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}}
+location ^~ /pve2/ {{
+    proxy_pass {upstream}pve2/;
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify {verify_tls};
+    proxy_set_header Host {host_header};
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}}
+location ^~ /novnc/ {{
+    proxy_pass {upstream}novnc/;
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify {verify_tls};
+    proxy_set_header Host {host_header};
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}}
+location ^~ /api2/ {{
+    proxy_pass {upstream}api2/;
     proxy_http_version 1.1;
     proxy_ssl_server_name on;
     proxy_ssl_verify {verify_tls};
