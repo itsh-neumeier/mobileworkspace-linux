@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.12] - 2026-03-10
+
+### Fixed
+- GHCR publish flow now builds SemVer image tags from `main` using the `VERSION` file (reliable container publish even when tag-login workflows are restricted)
+
 ## [0.6.11] - 2026-03-10
 
 ### Added
