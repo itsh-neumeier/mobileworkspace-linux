@@ -6,93 +6,35 @@ services:
       - "80:80"
     environment:
       DOMAIN_OR_HOST: ${DOMAIN_OR_HOST}
-      PUBLIC_USER_NAME: ${PUBLIC_USER_NAME}
-      PUBLIC_USER_PASSWORD_HASH: ${PUBLIC_USER_PASSWORD_HASH}
-      PUBLIC_DESKTOP_USER_NAME: ${PUBLIC_DESKTOP_USER_NAME}
-      PUBLIC_DESKTOP_USER_PASSWORD_HASH: ${PUBLIC_DESKTOP_USER_PASSWORD_HASH}
-      INTERNAL_USER_NAME: ${INTERNAL_USER_NAME}
-      INTERNAL_USER_PASSWORD_HASH: ${INTERNAL_USER_PASSWORD_HASH}
-      INTERNAL_DESKTOP_USER_NAME: ${INTERNAL_DESKTOP_USER_NAME}
-      INTERNAL_DESKTOP_USER_PASSWORD_HASH: ${INTERNAL_DESKTOP_USER_PASSWORD_HASH}
+      ADMIN_USER_NAME: ${ADMIN_USER_NAME}
+      ADMIN_USER_PASSWORD_HASH: ${ADMIN_USER_PASSWORD_HASH}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./generated/Caddy.users:/etc/caddy/Caddy.users:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - workspace-public
-      - workspace-internal
-      - desktop-public
-      - desktop-internal
+      - admin-ui
     networks:
       - edge
 
-  workspace-public:
-    image: lscr.io/linuxserver/code-server:4.104.2
-    container_name: workspace-public
+  admin-ui:
+    build:
+      context: ./admin-ui
+    container_name: mobileworkspace-admin-ui
     restart: unless-stopped
     environment:
-      PUID: 1000
-      PGID: 1000
-      TZ: Europe/Berlin
-      PASSWORD: ${PUBLIC_WORKSPACE_PASSWORD}
-      SUDO_PASSWORD: ${PUBLIC_WORKSPACE_PASSWORD}
-      DEFAULT_WORKSPACE: /config/workspace
+      MWC_PROJECT_ROOT: /workspace
+      MWC_USERS_FILE: /workspace/users/users.json
+      MWC_GENERATED_COMPOSE: /workspace/generated/docker-compose.users.yml
+      MWC_GENERATED_CADDY: /workspace/generated/Caddy.users
+      MWC_DOMAIN_OR_HOST: ${DOMAIN_OR_HOST}
+      MWC_TIMEZONE: ${TIMEZONE:-Europe/Berlin}
     volumes:
-      - ./data/public/config:/config
+      - ./:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - edge
-      - public_net
-
-  workspace-internal:
-    image: lscr.io/linuxserver/code-server:4.104.2
-    container_name: workspace-internal
-    restart: unless-stopped
-    environment:
-      PUID: 1000
-      PGID: 1000
-      TZ: Europe/Berlin
-      PASSWORD: ${INTERNAL_WORKSPACE_PASSWORD}
-      SUDO_PASSWORD: ${INTERNAL_WORKSPACE_PASSWORD}
-      DEFAULT_WORKSPACE: /config/workspace
-    volumes:
-      - ./data/internal/config:/config
-    networks:
-      - edge
-      - internal_net
-
-  desktop-public:
-    image: lscr.io/linuxserver/webtop:ubuntu-kde
-    container_name: desktop-public
-    restart: unless-stopped
-    shm_size: "1gb"
-    environment:
-      PUID: 1000
-      PGID: 1000
-      TZ: Europe/Berlin
-      SUBFOLDER: /desktop-public/
-      TITLE: Public Desktop
-    volumes:
-      - ./data/desktop-public/config:/config
-    networks:
-      - edge
-      - public_net
-
-  desktop-internal:
-    image: lscr.io/linuxserver/webtop:ubuntu-kde
-    container_name: desktop-internal
-    restart: unless-stopped
-    shm_size: "1gb"
-    environment:
-      PUID: 1000
-      PGID: 1000
-      TZ: Europe/Berlin
-      SUBFOLDER: /desktop-internal/
-      TITLE: Internal Desktop
-    volumes:
-      - ./data/desktop-internal/config:/config
-    networks:
-      - edge
-      - internal_net
 
 networks:
   edge:

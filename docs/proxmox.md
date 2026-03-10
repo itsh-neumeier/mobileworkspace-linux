@@ -13,6 +13,7 @@ Reasons:
 - Easier upgrades, backups, and rollback
 - Better isolation for multi-user admin workloads
 - More predictable behavior for WebVNC desktop containers
+- Cleaner operation for a web-based admin panel that provisions containers dynamically
 
 ## Suggested VM Sizing
 
@@ -37,8 +38,9 @@ Increase RAM if several desktop users will be active at the same time.
 3. Assign a static IP or a DHCP reservation.
 4. Install Docker Engine and Docker Compose plugin.
 5. Clone this repository into the VM.
-6. Copy `.env.example` to `.env` and configure credentials.
-7. Start the stack with `docker compose up -d`.
+6. Copy `.env.example` to `.env` and configure the admin credentials.
+7. Start the stack with `docker compose up -d --build`.
+8. Open `/admin/` and create user workspaces from the web UI.
 
 ## Networking in Proxmox
 
@@ -62,12 +64,12 @@ For internal-only access:
 
 ## Storage
 
-Persisted user data is stored in:
+Persisted user data is stored under:
 
-- `/path/to/repo/data/public`
-- `/path/to/repo/data/internal`
-- `/path/to/repo/data/desktop-public`
-- `/path/to/repo/data/desktop-internal`
+- `/path/to/repo/data/<route>/`
+- `/path/to/repo/users/users.json`
+- `/path/to/repo/generated/docker-compose.users.yml`
+- `/path/to/repo/generated/Caddy.users`
 
 In Proxmox, you can protect these with:
 
@@ -103,3 +105,4 @@ Recommended maintenance practices:
 - pin or deliberately update container image tags
 - keep `.env` out of Git
 - monitor RAM usage if running multiple desktop sessions
+- restrict access to the admin UI because it controls the Docker socket

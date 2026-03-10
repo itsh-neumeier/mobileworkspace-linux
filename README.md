@@ -1,42 +1,58 @@
 # Mobile Web Console Hub
 
-Mobile Web Console Hub is a Docker-based self-hosted platform that provides browser-accessible Linux workspaces for multiple users. Each user gets an isolated environment with either a browser terminal or a full Linux desktop in the browser, persistent storage, and controlled network access for either internet-facing administration tasks or internal-network operations.
+Mobile Web Console Hub is a self-hosted multi-user platform for Proxmox environments. It gives you a browser-based admin panel where you can create users and provision their own Linux workspaces as Docker containers.
 
-This project is designed for situations where you are working from managed devices without local admin rights and still need a practical, mobile-friendly web UI to run shell commands, SSH into infrastructure, or perform lightweight operational tasks.
+Each workspace can be created as either:
+
+- a terminal-focused Linux web console
+- a full Linux desktop over WebVNC/noVNC
+
+Each user environment can also be assigned to either:
+
+- an internet-enabled network
+- an internal-only Docker network
+
+The project is designed for situations where you work from managed notebooks or mobile devices and still need a practical web UI for SSH, shell commands, light operations work, or a temporary Linux desktop.
 
 ## Features
 
-- Web UI accessible from phones, tablets, and notebooks
-- One isolated Linux environment per user
-- Optional full Linux desktop through WebVNC/noVNC
-- Persistent home directories
-- Optional internet access or internal-only network access per environment
-- Built-in terminal through `code-server`
-- Reverse proxy with per-user entry paths
+- Admin web UI for user management
+- User creation directly from the browser
+- Automatic provisioning of per-user Docker containers
+- Terminal workspaces with `code-server`
+- Desktop workspaces with `webtop` over WebVNC
+- Per-user route generation in Caddy
+- Public or internal-only network placement per workspace
+- Persistent storage per user
+- Proxmox-friendly VM deployment model
 - MIT licensed
-- Semantic versioning ready
+- Semantic versioning and GitHub release flow
 
 ## Architecture
 
-- `caddy`: single HTTPS-ready entrypoint and reverse proxy
-- `workspace-public`: example user environment with internet access
-- `workspace-internal`: example user environment on internal-only network
-- `desktop-public`: example internet-enabled Linux desktop via WebVNC
-- `desktop-internal`: example internal-only Linux desktop via WebVNC
-- `code-server`: provides a browser UI and integrated terminal for each user
-- `webtop`: provides a full desktop session over the browser
+- `caddy`: reverse proxy and entrypoint
+- `admin-ui`: browser-based admin panel that manages users and regenerates config
+- `generated/docker-compose.users.yml`: generated service definitions for enabled users
+- `generated/Caddy.users`: generated reverse proxy routes for enabled users
+- `users/users.json`: local user registry created by the admin UI at runtime
 
-`code-server` is used for terminal-first workspaces because it works well on mobile browsers and includes a terminal, file browser, and optional editor. `webtop` adds a complete Linux desktop over WebVNC/noVNC for users who need GUI tools or a more traditional desktop workflow.
+The admin UI writes the generated files and then runs:
+
+```bash
+docker compose -f docker-compose.yml -f generated/docker-compose.users.yml up -d --remove-orphans
+```
+
+This means user containers are created, updated, disabled, or deleted directly from the browser.
 
 ## Quick Start
 
-1. Copy the example environment file:
+1. Copy the environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Generate password hashes for Caddy basic auth:
+2. Create an admin password hash for Caddy:
 
 ```bash
 docker run --rm caddy:2.8-alpine caddy hash-password --plaintext "replace-me"
@@ -45,25 +61,46 @@ docker run --rm caddy:2.8-alpine caddy hash-password --plaintext "replace-me"
 3. Edit `.env` and set:
 
 - `DOMAIN_OR_HOST`
-- `PUBLIC_USER_PASSWORD_HASH`
-- `INTERNAL_USER_PASSWORD_HASH`
-- `PUBLIC_WORKSPACE_PASSWORD`
-- `INTERNAL_WORKSPACE_PASSWORD`
-- `PUBLIC_DESKTOP_USER_PASSWORD_HASH`
-- `INTERNAL_DESKTOP_USER_PASSWORD_HASH`
+- `TIMEZONE`
+- `ADMIN_USER_NAME`
+- `ADMIN_USER_PASSWORD_HASH`
 
 4. Start the stack:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-5. Open the service:
+5. Open the admin panel:
 
-- `http://YOUR_HOST/public/`
-- `http://YOUR_HOST/desktop-public/`
-- `http://YOUR_HOST/internal/`
-- `http://YOUR_HOST/desktop-internal/`
+- `http://YOUR_HOST/admin/`
+
+6. Create users from the web UI.
+
+The admin panel will then create routes such as:
+
+- `http://YOUR_HOST/workspaces/ops/`
+- `http://YOUR_HOST/workspaces/internal-admin/`
+
+## User Management in the Web UI
+
+The admin panel supports:
+
+- creating a user workspace
+- choosing terminal or desktop mode
+- choosing public or internal-only network placement
+- enabling and disabling a workspace
+- redeploying a workspace
+- deleting a workspace and removing its generated container definition
+
+Each created user gets:
+
+- an isolated container
+- a generated Caddy route
+- persistent storage under `data/<route>/`
+- access protection through Caddy basic auth
+
+For terminal workspaces, the same password is also used for the internal `code-server` login.
 
 ## Proxmox
 
@@ -73,58 +110,33 @@ This project is intended to run on Proxmox. The recommended deployment model is:
 - one dedicated Debian or Ubuntu VM
 - Docker and Docker Compose inside that VM
 
-That approach is more reliable than running Docker inside an LXC container, especially for multi-user networking and WebVNC desktops.
+That model is more reliable than running Docker inside an LXC container, especially when you want dynamic user provisioning and desktop containers.
 
 Detailed guidance: `docs/proxmox.md`
 
 ## Default Network Model
 
-- `edge`: exposed to the reverse proxy
-- `public_net`: internet-enabled Docker bridge network
-- `internal_net`: internal Docker network without outbound internet access
+- `edge`: network shared by Caddy, admin UI, and user workspaces
+- `public_net`: Docker bridge network with outbound internet access
+- `internal_net`: Docker internal network without outbound internet access
 
-The included examples show two user profiles:
-
-- `workspace-public`: can reach the internet
-- `workspace-internal`: can only communicate on the internal Docker network unless you deliberately connect it elsewhere
-- `desktop-public`: full browser desktop with internet access
-- `desktop-internal`: full browser desktop on an internal-only network
-
-## Add More Users
-
-Use the helper script to scaffold a new user block:
-
-```powershell
-pwsh ./scripts/New-WorkspaceUser.ps1 -UserName ops -Route ops -Mode public
-```
-
-Desktop example:
-
-```powershell
-pwsh ./scripts/New-WorkspaceUser.ps1 -UserName ops-desktop -Route desktop-ops -Mode internal -WorkspaceType desktop
-```
-
-The script prints:
-
-- a Docker Compose service snippet
-- a Caddy route snippet
-- the env variables you need to add to `.env`
+The admin UI assigns each workspace to one of these network profiles during creation.
 
 ## Security Notes
 
-- Put this behind TLS before exposing it to the internet
+- Put the service behind TLS before exposing it publicly
+- The admin UI mounts the Docker socket and therefore has full control over the Docker host
 - Replace basic auth with SSO or an identity-aware proxy if this will be used broadly
-- Store secrets in a secure secret manager for production use
-- Restrict SSH keys and outbound network reach per user role
-- Review Docker bind mounts and never mount host-sensitive paths
-- WebVNC desktops need more RAM and CPU than terminal-only workspaces
+- Store sensitive values outside Git and restrict filesystem permissions on the VM
+- Desktop workspaces need more CPU and RAM than terminal-only workspaces
+- Review Docker images and mounted paths before production use
 
 ## Versioning and Releases
 
 - Project version is stored in `VERSION`
 - Update `CHANGELOG.md` for every release
-- Create Git tags using Semantic Versioning, for example `v0.2.0`
-- GitHub Actions will validate the tag and publish a release archive
+- Use Semantic Versioning tags such as `v0.2.0`
+- GitHub Actions creates a release artifact for pushed version tags
 
 Example release flow:
 
@@ -133,19 +145,6 @@ git add .
 git commit -m "release: v0.2.0"
 git tag v0.2.0
 git push origin main --tags
-```
-
-## Publish to GitHub
-
-Create a public repository on GitHub and connect this folder:
-
-```bash
-git init
-git branch -M main
-git add .
-git commit -m "feat: initial release"
-git remote add origin https://github.com/YOUR-USER/YOUR-REPO.git
-git push -u origin main
 ```
 
 ## Documentation

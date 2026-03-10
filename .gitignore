@@ -6,3 +6,7 @@ data/
 users/
 !users/
 !users/.gitkeep
+generated/*
+!generated/.gitkeep
+!generated/Caddy.users
+!generated/docker-compose.users.yml
