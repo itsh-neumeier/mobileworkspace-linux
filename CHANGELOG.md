@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.4.2] - 2026-03-10
+
+### Added
+- Portainer first-run bootstrap that auto-generates admin credentials when no hash is configured
+- Persistent storage of the generated admin hash and initial password in the Portainer state volume
+
+### Changed
+- Portainer examples now default to `DOMAIN_OR_HOST=:80` for HTTP-first local deployment
+
 ## [0.4.1] - 2026-03-10
 
 ### Changed

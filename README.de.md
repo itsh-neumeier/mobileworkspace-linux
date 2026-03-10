@@ -130,9 +130,18 @@ Empfohlene Portainer-Umgebungsvariablen:
 Verhalten des Portainer-Stacks:
 
 - Caddy erzeugt seine Basiskonfiguration beim Start im Container selbst
+- beim ersten Start erzeugt Caddy ein zufälliges Admin-Passwort und schreibt es einmal in die Logs, wenn `ADMIN_USER_PASSWORD_HASH` leer ist
 - Benutzerregister und generierte Konfiguration liegen in einem benannten Docker-Volume
 - die Admin-WebUI provisioniert Benutzercontainer über den Docker-Socket
 - Benutzer-Workspaces verwenden benannte Docker-Volumes statt relativer Host-Pfade
+
+Empfohlen für den ersten Start:
+
+- `DOMAIN_OR_HOST=:80`
+- `ADMIN_USER_NAME=admin`
+- `ADMIN_USER_PASSWORD_HASH` leer lassen
+
+Nach dem ersten Start liest du das generierte Passwort in Portainer aus den Logs des Containers `mobileworkspace-caddy`.
 
 Die Admin-WebUI erzeugt anschließend Routen wie:
 

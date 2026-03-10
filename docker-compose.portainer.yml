@@ -8,20 +8,58 @@ services:
     environment:
       DOMAIN_OR_HOST: ${DOMAIN_OR_HOST}
       ADMIN_USER_NAME: ${ADMIN_USER_NAME}
-      ADMIN_USER_PASSWORD_HASH: ${ADMIN_USER_PASSWORD_HASH}
+      ADMIN_USER_PASSWORD_HASH: ${ADMIN_USER_PASSWORD_HASH:-}
     command:
       - /bin/sh
       - -c
       - |
-        mkdir -p /state/generated
+        set -eu
+        mkdir -p /state/generated /state/bootstrap
         if [ ! -f /state/generated/Caddy.users ]; then
           printf '# Generated routes for user workspaces will be written here by the admin UI.\n' > /state/generated/Caddy.users
         fi
+        if [ -f /state/bootstrap/admin-auth.env ]; then
+          . /state/bootstrap/admin-auth.env
+        else
+          STORED_ADMIN_USER_NAME=""
+          STORED_ADMIN_USER_PASSWORD_HASH=""
+          STORED_ADMIN_USER_PASSWORD=""
+        fi
+        EFFECTIVE_ADMIN_USER_NAME="$${ADMIN_USER_NAME:-$${STORED_ADMIN_USER_NAME:-admin}}"
+        EFFECTIVE_ADMIN_USER_PASSWORD_HASH="$${ADMIN_USER_PASSWORD_HASH:-}"
+        if [ -z "$$EFFECTIVE_ADMIN_USER_PASSWORD_HASH" ] || [ "$$EFFECTIVE_ADMIN_USER_PASSWORD_HASH" = "CHANGE_ME" ]; then
+          if [ -n "$${STORED_ADMIN_USER_PASSWORD_HASH:-}" ]; then
+            EFFECTIVE_ADMIN_USER_PASSWORD_HASH="$$STORED_ADMIN_USER_PASSWORD_HASH"
+            EFFECTIVE_ADMIN_USER_PASSWORD="$${STORED_ADMIN_USER_PASSWORD:-}"
+          else
+            EFFECTIVE_ADMIN_USER_PASSWORD="$$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20)"
+            EFFECTIVE_ADMIN_USER_PASSWORD_HASH="$$(caddy hash-password --plaintext "$$EFFECTIVE_ADMIN_USER_PASSWORD")"
+            cat > /state/bootstrap/admin-auth.env <<EOF_AUTH
+STORED_ADMIN_USER_NAME=$$EFFECTIVE_ADMIN_USER_NAME
+STORED_ADMIN_USER_PASSWORD_HASH=$$EFFECTIVE_ADMIN_USER_PASSWORD_HASH
+STORED_ADMIN_USER_PASSWORD=$$EFFECTIVE_ADMIN_USER_PASSWORD
+EOF_AUTH
+            echo "=================================================="
+            echo "Mobile Web Console Hub initial admin credentials"
+            echo "Username: $$EFFECTIVE_ADMIN_USER_NAME"
+            echo "Password: $$EFFECTIVE_ADMIN_USER_PASSWORD"
+            echo "These credentials were generated on first start."
+            echo "Stored in volume path: /state/bootstrap/admin-auth.env"
+            echo "=================================================="
+          fi
+        else
+          EFFECTIVE_ADMIN_USER_PASSWORD="$${STORED_ADMIN_USER_PASSWORD:-}"
+          cat > /state/bootstrap/admin-auth.env <<EOF_AUTH
+STORED_ADMIN_USER_NAME=$$EFFECTIVE_ADMIN_USER_NAME
+STORED_ADMIN_USER_PASSWORD_HASH=$$EFFECTIVE_ADMIN_USER_PASSWORD_HASH
+STORED_ADMIN_USER_PASSWORD=$$EFFECTIVE_ADMIN_USER_PASSWORD
+EOF_AUTH
+        fi
         cat <<'EOF' > /etc/caddy/Caddyfile
-        {$$DOMAIN_OR_HOST} {
+        HOST_PLACEHOLDER {
         	handle_path /admin/* {
         		basic_auth {
-        			{$$ADMIN_USER_NAME} {$$ADMIN_USER_PASSWORD_HASH}
+        			ADMIN_USER_PLACEHOLDER ADMIN_HASH_PLACEHOLDER
         		}
         		reverse_proxy admin-ui:8080
         	}
@@ -79,6 +117,9 @@ services:
         	}
         }
         EOF
+        sed -i "s|HOST_PLACEHOLDER|$${DOMAIN_OR_HOST:-:80}|g" /etc/caddy/Caddyfile
+        sed -i "s|ADMIN_USER_PLACEHOLDER|$$EFFECTIVE_ADMIN_USER_NAME|g" /etc/caddy/Caddyfile
+        sed -i "s|ADMIN_HASH_PLACEHOLDER|$$EFFECTIVE_ADMIN_USER_PASSWORD_HASH|g" /etc/caddy/Caddyfile
         exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     volumes:
       - mwc_state:/state

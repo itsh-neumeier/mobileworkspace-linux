@@ -130,9 +130,18 @@ Recommended Portainer environment variables:
 Portainer stack behavior:
 
 - Caddy builds its base config inside the container at startup
+- on first run, if `ADMIN_USER_PASSWORD_HASH` is empty, Caddy generates a random admin password and logs it once
 - user registry and generated config are stored in a named volume
 - the admin UI provisions user containers through the Docker socket
 - user workspaces use named Docker volumes instead of relative host paths
+
+Recommended for first boot:
+
+- `DOMAIN_OR_HOST=:80`
+- `ADMIN_USER_NAME=admin`
+- leave `ADMIN_USER_PASSWORD_HASH` empty
+
+After the first start, read the generated password from the `mobileworkspace-caddy` container logs in Portainer.
 
 The admin panel will then create routes such as:
 
