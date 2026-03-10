@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.5] - 2026-03-10
+
+### Fixed
+- Stabilized admin bootstrap repair logic to avoid repeated manual initial credential resets after first deploy
+- Fixed workspace URL rendering to use the active request host/scheme and avoid malformed `http://:` links
+
+### Changed
+- Proxmox backend configuration is now always visible and editable in the Admin UI (including provisioner mode)
+- Proxmox mode selection now persists in UI settings storage
+
 ## [0.6.4] - 2026-03-10
 
 ### Changed

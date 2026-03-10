@@ -179,7 +179,7 @@ Detailed guidance: `docs/proxmox.md`
 
 If you want Mobile Web Console Hub to create desktop environments as real Proxmox VMs (instead of Docker webtop containers), set:
 
-- `MWC_PROVISIONER_MODE=proxmox_vm`
+- `Provisioner Mode = Proxmox VM` in the Admin UI settings panel
 
 In Proxmox VM mode, the admin UI also provides:
 

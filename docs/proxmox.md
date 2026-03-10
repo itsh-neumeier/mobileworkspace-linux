@@ -120,9 +120,7 @@ Recommended maintenance practices:
 
 Mobile Web Console Hub can also create and manage desktop workspaces as real Proxmox VMs through the Proxmox API.
 
-Set this environment variable in your deployment:
-
-- `MWC_PROVISIONER_MODE=proxmox_vm`
+Enable `Proxmox VM` as provisioner mode in the Admin UI settings panel.
 
 Notes:
 

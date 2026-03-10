@@ -65,7 +65,7 @@ ADMIN_INITIAL_PASSWORD = os.environ.get("ADMIN_INITIAL_PASSWORD", "admin")
 ADMIN_AUTO_REPAIR = os.environ.get("ADMIN_AUTO_REPAIR", "true").strip().lower() in {"1", "true", "yes"}
 SESSION_SECRET_FILE = Path(os.environ.get("MWC_SESSION_SECRET_FILE", PROJECT_ROOT / "bootstrap" / "session-secret"))
 PROXMOX_SETTINGS_FILE = Path(os.environ.get("MWC_PROXMOX_SETTINGS_FILE", PROJECT_ROOT / "bootstrap" / "proxmox-settings.json"))
-PROVISIONER_MODE = os.environ.get("MWC_PROVISIONER_MODE", "docker").strip().lower()
+PROVISIONER_MODE_ENV = os.environ.get("MWC_PROVISIONER_MODE", "docker").strip().lower()
 PROXMOX_API_URL = os.environ.get("MWC_PROXMOX_API_URL", "").strip().rstrip("/")
 PROXMOX_NODE = os.environ.get("MWC_PROXMOX_NODE", "").strip()
 PROXMOX_TOKEN_ID = os.environ.get("MWC_PROXMOX_TOKEN_ID", "").strip()
@@ -143,6 +143,9 @@ TRANSLATIONS = {
         "proxmox_template_vmid": "Template VMID",
         "proxmox_verify_tls": "Verify TLS",
         "save_proxmox_settings": "Save Proxmox Settings",
+        "provisioner_mode": "Provisioner Mode",
+        "docker_mode": "Docker",
+        "proxmox_vm_mode": "Proxmox VM",
     },
     "de": {
         "product_name": "Mobile Web Console Hub",
@@ -200,6 +203,9 @@ TRANSLATIONS = {
         "proxmox_template_vmid": "Template VMID",
         "proxmox_verify_tls": "TLS prüfen",
         "save_proxmox_settings": "Proxmox Einstellungen speichern",
+        "provisioner_mode": "Provisioner Modus",
+        "docker_mode": "Docker",
+        "proxmox_vm_mode": "Proxmox VM",
     },
 }
 
@@ -382,7 +388,7 @@ PAGE_TEMPLATE = """
           </div>
           <div class="col-lg-4">
             <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
-              <span class="metric-chip fw-semibold">Host: {{ domain }}</span>
+              <span class="metric-chip fw-semibold">Host: {{ public_host }}</span>
               <span class="metric-chip fw-semibold">Timezone: {{ timezone }}</span>
               <span class="metric-chip fw-semibold">Users: {{ users|length }}</span>
             </div>
@@ -405,30 +411,36 @@ PAGE_TEMPLATE = """
             {% if flash %}
             <div class="alert {{ 'alert-danger' if flash_error else 'alert-success' }} rounded-4" role="alert">{{ flash }}</div>
             {% endif %}
-            {% if proxmox_mode %}
             <div class="border rounded-4 p-3 mb-3">
               <div class="fw-semibold mb-3">{{ tr.proxmox_backend_settings }}</div>
               <form method="post" action="{{ url_for('save_proxmox_settings_route') }}">
                 <div class="row g-3">
                   <div class="col-12">
+                    <label class="form-label fw-semibold" for="cfg_provisioner_mode">{{ tr.provisioner_mode }}</label>
+                    <select class="form-select" id="cfg_provisioner_mode" name="cfg_provisioner_mode">
+                      <option value="docker" {{ 'selected' if proxmox_cfg.provisioner_mode == 'docker' else '' }}>{{ tr.docker_mode }}</option>
+                      <option value="proxmox_vm" {{ 'selected' if proxmox_cfg.provisioner_mode == 'proxmox_vm' else '' }}>{{ tr.proxmox_vm_mode }}</option>
+                    </select>
+                  </div>
+                  <div class="col-12">
                     <label class="form-label fw-semibold" for="cfg_api_url">{{ tr.proxmox_api_url }}</label>
-                    <input class="form-control" id="cfg_api_url" name="cfg_api_url" placeholder="https://proxmox.local:8006" value="{{ proxmox_cfg.api_url }}" required>
+                    <input class="form-control" id="cfg_api_url" name="cfg_api_url" placeholder="https://proxmox.local:8006" value="{{ proxmox_cfg.api_url }}">
                   </div>
                   <div class="col-6">
                     <label class="form-label fw-semibold" for="cfg_node">{{ tr.proxmox_node }}</label>
-                    <input class="form-control" id="cfg_node" name="cfg_node" value="{{ proxmox_cfg.node }}" required>
+                    <input class="form-control" id="cfg_node" name="cfg_node" value="{{ proxmox_cfg.node }}">
                   </div>
                   <div class="col-6">
                     <label class="form-label fw-semibold" for="cfg_template_vmid">{{ tr.proxmox_template_vmid }}</label>
-                    <input class="form-control" id="cfg_template_vmid" name="cfg_template_vmid" value="{{ proxmox_cfg.template_vmid }}" required>
+                    <input class="form-control" id="cfg_template_vmid" name="cfg_template_vmid" value="{{ proxmox_cfg.template_vmid }}">
                   </div>
                   <div class="col-12">
                     <label class="form-label fw-semibold" for="cfg_token_id">{{ tr.proxmox_token_id }}</label>
-                    <input class="form-control" id="cfg_token_id" name="cfg_token_id" value="{{ proxmox_cfg.token_id }}" required>
+                    <input class="form-control" id="cfg_token_id" name="cfg_token_id" value="{{ proxmox_cfg.token_id }}">
                   </div>
                   <div class="col-12">
                     <label class="form-label fw-semibold" for="cfg_token_secret">{{ tr.proxmox_token_secret }}</label>
-                    <input class="form-control" id="cfg_token_secret" name="cfg_token_secret" type="password" value="{{ proxmox_cfg.token_secret }}" required>
+                    <input class="form-control" id="cfg_token_secret" name="cfg_token_secret" type="password" value="{{ proxmox_cfg.token_secret }}">
                   </div>
                   <div class="col-12">
                     <div class="form-check">
@@ -442,6 +454,7 @@ PAGE_TEMPLATE = """
                 </button>
               </form>
             </div>
+            {% if proxmox_mode %}
             <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
               <span class="soft-badge {{ 'status-active' if proxmox_ready_ok else 'status-disabled' }}">
                 <i class="bi bi-hdd-network me-2"></i>{{ 'Proxmox API ready' if proxmox_ready_ok else proxmox_ready_message }}
@@ -565,7 +578,7 @@ PAGE_TEMPLATE = """
                         <i class="bi bi-box-seam-fill me-2"></i>{{ user.container_name }}
                       </div>
                       <div class="url-pill px-3 py-2 d-inline-flex align-items-center">
-                        <i class="bi bi-link-45deg me-2"></i>http://{{ domain }}{{ user.route_path }}
+                        <i class="bi bi-link-45deg me-2"></i>{{ user.public_url }}
                       </div>
                       {% endif %}
                     </div>
@@ -830,13 +843,22 @@ def ensure_storage() -> None:
 def ensure_admin_credentials() -> None:
     existing_user = ADMIN_USER_FILE.read_text(encoding="utf-8").strip() if ADMIN_USER_FILE.exists() else ""
     existing_hash = ADMIN_HASH_FILE.read_text(encoding="utf-8").strip() if ADMIN_HASH_FILE.exists() else ""
+    bootstrap_plain = ADMIN_PLAIN_FILE.read_text(encoding="utf-8").strip() if ADMIN_PLAIN_FILE.exists() else ""
+    force_change = ADMIN_FORCE_CHANGE_FILE.read_text(encoding="utf-8").strip() if ADMIN_FORCE_CHANGE_FILE.exists() else "0"
     if existing_user and existing_hash:
-        # Keep existing credentials if they look valid; auto-repair only broken bootstrap state.
         if not ADMIN_AUTO_REPAIR:
             return
-        if passlib_bcrypt.identify(existing_hash):
+        hash_valid = passlib_bcrypt.identify(existing_hash)
+        if hash_valid and bootstrap_plain:
+            if passlib_bcrypt.verify(bootstrap_plain, existing_hash):
+                return
+            print("Detected mismatch between bootstrap plain password and hash, auto-repairing.")
+        elif hash_valid and force_change != "1":
             return
-        print("Detected invalid admin hash, auto-repairing bootstrap credentials.")
+        elif hash_valid and force_change == "1" and not bootstrap_plain:
+            print("Detected bootstrap state without plain password, restoring initial admin credentials.")
+        else:
+            print("Detected invalid admin hash, auto-repairing bootstrap credentials.")
 
     username = os.environ.get("ADMIN_USER_NAME", "admin").strip() or "admin"
     plain = ADMIN_INITIAL_PASSWORD
@@ -1096,7 +1118,7 @@ def reload_proxy() -> tuple[bool, str]:
 
 
 def provision(users) -> tuple[bool, str]:
-    if PROVISIONER_MODE == "proxmox_vm":
+    if proxmox_enabled():
         clear_generated_proxy_files()
         return True, "Proxmox VM mode active."
     write_generated_files(users)
@@ -1109,11 +1131,12 @@ def clear_generated_proxy_files() -> None:
 
 
 def proxmox_enabled() -> bool:
-    return PROVISIONER_MODE == "proxmox_vm"
+    return current_provisioner_mode() == "proxmox_vm"
 
 
 def proxmox_default_settings() -> dict:
     return {
+        "provisioner_mode": PROVISIONER_MODE_ENV if PROVISIONER_MODE_ENV in {"docker", "proxmox_vm"} else "docker",
         "api_url": PROXMOX_API_URL,
         "node": PROXMOX_NODE,
         "token_id": PROXMOX_TOKEN_ID,
@@ -1139,6 +1162,9 @@ def proxmox_settings() -> dict:
         stored = {}
     merged = defaults.copy()
     merged.update(stored)
+    merged["provisioner_mode"] = str(merged.get("provisioner_mode", "docker")).strip().lower()
+    if merged["provisioner_mode"] not in {"docker", "proxmox_vm"}:
+        merged["provisioner_mode"] = "docker"
     merged["api_url"] = str(merged.get("api_url", "")).strip().rstrip("/")
     merged["node"] = str(merged.get("node", "")).strip()
     merged["token_id"] = str(merged.get("token_id", "")).strip()
@@ -1162,6 +1188,10 @@ def proxmox_settings() -> dict:
 
 def save_proxmox_settings(values: dict) -> None:
     PROXMOX_SETTINGS_FILE.write_text(json.dumps(values, indent=2) + "\n", encoding="utf-8")
+
+
+def current_provisioner_mode() -> str:
+    return proxmox_settings().get("provisioner_mode", "docker")
 
 
 def proxmox_ready(settings: dict | None = None) -> tuple[bool, str]:
@@ -1356,6 +1386,30 @@ def redirect_with_message(message: str, error: bool = False):
     return redirect(url_for("index", message=message, error="1" if error else "0", lang=current_lang()))
 
 
+def public_host_display() -> str:
+    raw = (DOMAIN_OR_HOST or "").strip()
+    host = request.host
+    if not raw or raw in {"localhost", ":80"}:
+        return host
+    if "://" in raw:
+        raw = raw.split("://", 1)[1]
+    raw = raw.lstrip(":")
+    return raw or host
+
+
+def public_scheme() -> str:
+    forwarded = request.headers.get("X-Forwarded-Proto", "").split(",")[0].strip()
+    if forwarded:
+        return forwarded
+    return request.scheme or "http"
+
+
+def workspace_public_url(user: dict) -> str:
+    if user.get("provider") == "proxmox_vm":
+        return user.get("proxmox", {}).get("access_url", "")
+    return f"{public_scheme()}://{public_host_display()}{user.get('route_path', '/')}"
+
+
 @APP.route("/")
 def root():
     return redirect("/admin/")
@@ -1437,15 +1491,21 @@ def index():
     lang = current_lang()
     tr = TRANSLATIONS[lang]
     users = load_users()
+    users_view = []
+    for user in users:
+        user_copy = dict(user)
+        user_copy["public_url"] = workspace_public_url(user)
+        users_view.append(user_copy)
     flash_data = current_flash()
     cfg = proxmox_settings()
     ready_ok, ready_message = proxmox_health_check() if proxmox_enabled() else (False, "")
     return render_template_string(
         PAGE_TEMPLATE,
-        users=users,
+        users=users_view,
         tr=tr,
         lang=lang,
         domain=DOMAIN_OR_HOST,
+        public_host=public_host_display(),
         timezone=TIMEZONE,
         version=APP_VERSION,
         github_url=GITHUB_URL,
@@ -1478,10 +1538,10 @@ def proxmox_test():
 @APP.post("/admin/proxmox/settings")
 @login_required
 def save_proxmox_settings_route():
-    if not proxmox_enabled():
-        return redirect_with_message("Proxmox VM mode is not enabled.", error=True)
     try:
         cfg = proxmox_settings()
+        mode = request.form.get("cfg_provisioner_mode", "").strip().lower()
+        cfg["provisioner_mode"] = mode if mode in {"docker", "proxmox_vm"} else "docker"
         cfg["api_url"] = request.form.get("cfg_api_url", "").strip().rstrip("/")
         cfg["node"] = request.form.get("cfg_node", "").strip()
         cfg["template_vmid"] = request.form.get("cfg_template_vmid", "").strip()

@@ -179,7 +179,7 @@ Detaillierte Anleitung: `docs/proxmox.md`
 
 Wenn Mobile Web Console Hub Desktop-Umgebungen als echte Proxmox-VMs (statt Docker-webtop-Containern) anlegen soll, setze:
 
-- `MWC_PROVISIONER_MODE=proxmox_vm`
+- `Provisioner Modus = Proxmox VM` im Admin-UI Einstellungsbereich
 
 Im Proxmox-VM-Modus bietet die Admin-WebUI zusätzlich:
 
