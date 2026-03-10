@@ -170,6 +170,8 @@ TRANSLATIONS = {
         "user_overview": "User Overview",
         "workspace_count": "Workspace Count",
         "reset_user_password": "Reset User Password",
+        "workspace_list": "Workspace List",
+        "create_workspace_form": "Create Workspace",
     },
     "de": {
         "product_name": "Mobile Web Console Hub",
@@ -255,6 +257,8 @@ TRANSLATIONS = {
         "user_overview": "Benutzerübersicht",
         "workspace_count": "Workspace Anzahl",
         "reset_user_password": "Benutzerpasswort zurücksetzen",
+        "workspace_list": "Workspace Liste",
+        "create_workspace_form": "Workspace erstellen",
     },
 }
 
@@ -410,7 +414,6 @@ PAGE_TEMPLATE = """
         <div>
           <div class="text-uppercase small fw-semibold text-primary mb-2">{{ tr.product_name }}</div>
           <h1 class="display-6 fw-bold mb-1">{{ tr.admin_console }}</h1>
-          <p class="text-body-secondary mb-0">{{ tr.subtitle }}</p>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
           <select class="form-select form-select-sm rounded-pill" id="langSelect" style="width:auto">
@@ -433,24 +436,21 @@ PAGE_TEMPLATE = """
         </div>
       </header>
 
-      <section class="glass-panel hero-card p-4 p-lg-5 mb-4">
-        <div class="row g-4 align-items-center">
-          <div class="col-lg-8">
-            <div class="hero-title fw-bold mb-3">Provision users, routes, and containers from one place.</div>
-            <p class="lead text-body-secondary mb-0">Choose terminal or desktop mode, assign a network policy, and let the panel regenerate Docker Compose and nginx routing automatically.</p>
-          </div>
-          <div class="col-lg-4">
-            <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
-              <span class="metric-chip fw-semibold">Host: {{ public_host }}</span>
-              <span class="metric-chip fw-semibold">Timezone: {{ timezone }}</span>
-              <span class="metric-chip fw-semibold">Users: {{ users|length }}</span>
-            </div>
-          </div>
-        </div>
-      </section>
+      <div class="d-flex flex-wrap gap-2 justify-content-end mb-4">
+        <span class="metric-chip fw-semibold">Host: {{ public_host }}</span>
+        <span class="metric-chip fw-semibold">Timezone: {{ timezone }}</span>
+        <span class="metric-chip fw-semibold">Users: {{ users|length }}</span>
+      </div>
+
+      <div class="d-flex justify-content-end mb-3">
+        <select class="form-select rounded-pill" id="workspaceViewSelect" style="max-width: 260px;">
+          <option value="list" {{ 'selected' if workspace_view == 'list' else '' }}>{{ tr.workspace_list }}</option>
+          <option value="create" {{ 'selected' if workspace_view == 'create' else '' }}>{{ tr.create_workspace_form }}</option>
+        </select>
+      </div>
 
       <div class="row g-4">
-        <div class="col-12 col-xl-4">
+        <div class="col-12" {{ 'style=display:none;' if workspace_view != 'create' else '' }}>
           <section class="glass-panel section-card p-4 h-100">
             <div class="d-flex align-items-center gap-2 mb-3">
               <div class="rounded-circle d-inline-flex align-items-center justify-content-center bg-primary-subtle text-primary" style="width: 2.5rem; height: 2.5rem;">
@@ -562,7 +562,7 @@ PAGE_TEMPLATE = """
           </section>
         </div>
 
-        <div class="col-12 col-xl-8">
+        <div class="col-12" {{ 'style=display:none;' if workspace_view != 'list' else '' }}>
           <section class="glass-panel section-card p-4 h-100">
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
               <div>
@@ -703,6 +703,14 @@ PAGE_TEMPLATE = """
       url.searchParams.set("lang", e.target.value);
       window.location.href = url.toString();
     });
+    const workspaceViewSelect = document.getElementById("workspaceViewSelect");
+    if (workspaceViewSelect) {
+      workspaceViewSelect.addEventListener("change", (e) => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("view", e.target.value);
+        window.location.href = url.toString();
+      });
+    }
   </script>
 </body>
 </html>
@@ -2325,6 +2333,9 @@ def index():
 def workspaces_page():
     lang = current_lang()
     tr = TRANSLATIONS[lang]
+    workspace_view = request.args.get("view", "list").strip().lower()
+    if workspace_view not in {"list", "create"}:
+        workspace_view = "list"
     users, sync_message = reconcile_workspace_state(load_users())
     users = enrich_proxmox_workspace_insights(users)
     users_view = []
@@ -2360,6 +2371,7 @@ def workspaces_page():
         proxmox_default_bridge=cfg["net_bridge"],
         proxmox_default_disk=cfg["vm_disk"],
         proxmox_default_start_on_create=cfg["vm_start_on_create"],
+        workspace_view=workspace_view,
         copyright_year=datetime.utcnow().year,
         **flash_data,
     )

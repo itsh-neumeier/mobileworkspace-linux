@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.17] - 2026-03-10
+
+### Changed
+- Workspace admin page now supports a header dropdown view switch (`Workspace List` / `Create Workspace`) so only one panel is shown at a time
+- Removed large hero/marketing text from admin workspace dashboard; kept focus on operations
+- Workspace route generation now follows workspace name input to reduce route confusion
+
 ## [0.6.16] - 2026-03-10
 
 ### Changed
