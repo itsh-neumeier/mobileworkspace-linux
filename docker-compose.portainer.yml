@@ -18,10 +18,10 @@ services:
           printf '# Generated routes for user workspaces will be written here by the admin UI.\n' > /state/generated/Caddy.users
         fi
         cat <<'EOF' > /etc/caddy/Caddyfile
-        {$DOMAIN_OR_HOST} {
+        {$$DOMAIN_OR_HOST} {
         	handle_path /admin/* {
-        		basicauth {
-        			{$ADMIN_USER_NAME} {$ADMIN_USER_PASSWORD_HASH}
+        		basic_auth {
+        			{$$ADMIN_USER_NAME} {$$ADMIN_USER_PASSWORD_HASH}
         		}
         		reverse_proxy admin-ui:8080
         	}

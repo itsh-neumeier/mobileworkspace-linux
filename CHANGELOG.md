@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.4.1] - 2026-03-10
+
+### Changed
+- Switched the admin UI container from the Flask development server to Gunicorn
+- Fixed Portainer Caddy placeholder escaping and updated `basic_auth` syntax
+
 ## [0.4.0] - 2026-03-10
 
 ### Added
