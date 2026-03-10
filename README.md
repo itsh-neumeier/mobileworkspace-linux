@@ -122,11 +122,6 @@ Recommended Portainer environment variables:
 - `MWC_PUBLIC_NETWORK`
 - `MWC_INTERNAL_NETWORK`
 - `MWC_PROVISIONER_MODE`
-- `MWC_PROXMOX_API_URL` (for Proxmox VM mode)
-- `MWC_PROXMOX_NODE` (for Proxmox VM mode)
-- `MWC_PROXMOX_TOKEN_ID` (for Proxmox VM mode)
-- `MWC_PROXMOX_TOKEN_SECRET` (for Proxmox VM mode)
-- `MWC_PROXMOX_TEMPLATE_VMID` (for Proxmox VM mode)
 
 Portainer stack behavior:
 
@@ -185,32 +180,12 @@ Detailed guidance: `docs/proxmox.md`
 If you want Mobile Web Console Hub to create desktop environments as real Proxmox VMs (instead of Docker webtop containers), set:
 
 - `MWC_PROVISIONER_MODE=proxmox_vm`
-- `MWC_PROXMOX_API_URL=https://YOUR-PROXMOX:8006`
-- `MWC_PROXMOX_NODE=YOUR_NODE`
-- `MWC_PROXMOX_TOKEN_ID=root@pam!mobileworkspace`
-- `MWC_PROXMOX_TOKEN_SECRET=YOUR_TOKEN_SECRET`
-- `MWC_PROXMOX_TEMPLATE_VMID=9000`
-
-Optional sizing and network controls:
-
-- `MWC_PROXMOX_VM_CORES`
-- `MWC_PROXMOX_VM_MEMORY_MB`
-- `MWC_PROXMOX_VM_DISK`
-- `MWC_PROXMOX_NET_BRIDGE`
-- `MWC_PROXMOX_VM_START_ON_CREATE`
-- `MWC_PROXMOX_VERIFY_TLS`
-- `MWC_PROXMOX_DESKTOP_URL_TEMPLATE`
 
 In Proxmox VM mode, the admin UI also provides:
 
+- backend Proxmox settings (API URL, node, token, template VMID, TLS verification)
 - per-user VM overrides (vCPU, RAM, bridge, disk, auto-start)
 - a built-in `Test Proxmox API` button for an end-to-end API check
-
-You can also run a manual API smoke test from shell:
-
-```bash
-sh scripts/proxmox-api-smoke.sh
-```
 
 ## Optional External Proxy
 

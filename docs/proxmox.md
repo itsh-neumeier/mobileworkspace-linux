@@ -120,28 +120,13 @@ Recommended maintenance practices:
 
 Mobile Web Console Hub can also create and manage desktop workspaces as real Proxmox VMs through the Proxmox API.
 
-Set these environment variables in your deployment:
+Set this environment variable in your deployment:
 
 - `MWC_PROVISIONER_MODE=proxmox_vm`
-- `MWC_PROXMOX_API_URL=https://PROXMOX_HOST:8006`
-- `MWC_PROXMOX_NODE=NODE_NAME`
-- `MWC_PROXMOX_TOKEN_ID=USER@REALM!TOKEN_NAME`
-- `MWC_PROXMOX_TOKEN_SECRET=TOKEN_SECRET`
-- `MWC_PROXMOX_TEMPLATE_VMID=TEMPLATE_VMID`
-
-Optional:
-
-- `MWC_PROXMOX_VM_CORES` (default `2`)
-- `MWC_PROXMOX_VM_MEMORY_MB` (default `4096`)
-- `MWC_PROXMOX_VM_DISK` (override disk config string)
-- `MWC_PROXMOX_NET_BRIDGE` (default `vmbr0`)
-- `MWC_PROXMOX_VM_START_ON_CREATE` (default `true`)
-- `MWC_PROXMOX_VERIFY_TLS` (default `true`)
-- `MWC_PROXMOX_DESKTOP_URL_TEMPLATE`
 
 Notes:
 
-- Create a VM template in Proxmox first and use its VMID as `MWC_PROXMOX_TEMPLATE_VMID`.
+- Configure Proxmox API URL, node, token, template VMID, and TLS behavior in the admin UI backend settings panel.
 - In this mode, desktop workspaces are created as Proxmox VMs (clone + config + optional start).
 - User actions in the web UI map to Proxmox VM actions:
   - enable -> start
@@ -149,4 +134,3 @@ Notes:
   - redeploy -> stop/start
   - delete -> stop/delete
 - The admin UI includes a `Test Proxmox API` action for live validation.
-- A shell smoke test is available at `scripts/proxmox-api-smoke.sh`.

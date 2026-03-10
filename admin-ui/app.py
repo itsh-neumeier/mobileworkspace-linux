@@ -64,6 +64,7 @@ ADMIN_FORCE_CHANGE_FILE = Path(os.environ.get("MWC_ADMIN_FORCE_CHANGE_FILE", PRO
 ADMIN_INITIAL_PASSWORD = os.environ.get("ADMIN_INITIAL_PASSWORD", "admin")
 ADMIN_AUTO_REPAIR = os.environ.get("ADMIN_AUTO_REPAIR", "true").strip().lower() in {"1", "true", "yes"}
 SESSION_SECRET_FILE = Path(os.environ.get("MWC_SESSION_SECRET_FILE", PROJECT_ROOT / "bootstrap" / "session-secret"))
+PROXMOX_SETTINGS_FILE = Path(os.environ.get("MWC_PROXMOX_SETTINGS_FILE", PROJECT_ROOT / "bootstrap" / "proxmox-settings.json"))
 PROVISIONER_MODE = os.environ.get("MWC_PROVISIONER_MODE", "docker").strip().lower()
 PROXMOX_API_URL = os.environ.get("MWC_PROXMOX_API_URL", "").strip().rstrip("/")
 PROXMOX_NODE = os.environ.get("MWC_PROXMOX_NODE", "").strip()
@@ -134,6 +135,14 @@ TRANSLATIONS = {
         "vm_disk": "Disk Override",
         "vm_disk_help": "Optional Proxmox disk config value (for example local-lvm:32).",
         "vm_start_on_create": "Start VM after create",
+        "proxmox_backend_settings": "Proxmox Backend Settings",
+        "proxmox_api_url": "API URL",
+        "proxmox_node": "Node",
+        "proxmox_token_id": "Token ID",
+        "proxmox_token_secret": "Token Secret",
+        "proxmox_template_vmid": "Template VMID",
+        "proxmox_verify_tls": "Verify TLS",
+        "save_proxmox_settings": "Save Proxmox Settings",
     },
     "de": {
         "product_name": "Mobile Web Console Hub",
@@ -183,6 +192,14 @@ TRANSLATIONS = {
         "vm_disk": "Disk Override",
         "vm_disk_help": "Optionaler Proxmox-Disk-Wert (z. B. local-lvm:32).",
         "vm_start_on_create": "VM nach Erstellung starten",
+        "proxmox_backend_settings": "Proxmox Backend Einstellungen",
+        "proxmox_api_url": "API URL",
+        "proxmox_node": "Node",
+        "proxmox_token_id": "Token ID",
+        "proxmox_token_secret": "Token Secret",
+        "proxmox_template_vmid": "Template VMID",
+        "proxmox_verify_tls": "TLS prüfen",
+        "save_proxmox_settings": "Proxmox Einstellungen speichern",
     },
 }
 
@@ -389,6 +406,42 @@ PAGE_TEMPLATE = """
             <div class="alert {{ 'alert-danger' if flash_error else 'alert-success' }} rounded-4" role="alert">{{ flash }}</div>
             {% endif %}
             {% if proxmox_mode %}
+            <div class="border rounded-4 p-3 mb-3">
+              <div class="fw-semibold mb-3">{{ tr.proxmox_backend_settings }}</div>
+              <form method="post" action="{{ url_for('save_proxmox_settings_route') }}">
+                <div class="row g-3">
+                  <div class="col-12">
+                    <label class="form-label fw-semibold" for="cfg_api_url">{{ tr.proxmox_api_url }}</label>
+                    <input class="form-control" id="cfg_api_url" name="cfg_api_url" placeholder="https://proxmox.local:8006" value="{{ proxmox_cfg.api_url }}" required>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold" for="cfg_node">{{ tr.proxmox_node }}</label>
+                    <input class="form-control" id="cfg_node" name="cfg_node" value="{{ proxmox_cfg.node }}" required>
+                  </div>
+                  <div class="col-6">
+                    <label class="form-label fw-semibold" for="cfg_template_vmid">{{ tr.proxmox_template_vmid }}</label>
+                    <input class="form-control" id="cfg_template_vmid" name="cfg_template_vmid" value="{{ proxmox_cfg.template_vmid }}" required>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-semibold" for="cfg_token_id">{{ tr.proxmox_token_id }}</label>
+                    <input class="form-control" id="cfg_token_id" name="cfg_token_id" value="{{ proxmox_cfg.token_id }}" required>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-semibold" for="cfg_token_secret">{{ tr.proxmox_token_secret }}</label>
+                    <input class="form-control" id="cfg_token_secret" name="cfg_token_secret" type="password" value="{{ proxmox_cfg.token_secret }}" required>
+                  </div>
+                  <div class="col-12">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="cfg_verify_tls" name="cfg_verify_tls" value="1" {{ 'checked' if proxmox_cfg.verify_tls else '' }}>
+                      <label class="form-check-label" for="cfg_verify_tls">{{ tr.proxmox_verify_tls }}</label>
+                    </div>
+                  </div>
+                </div>
+                <button class="btn btn-outline-secondary mt-3" type="submit">
+                  <i class="bi bi-save me-2"></i>{{ tr.save_proxmox_settings }}
+                </button>
+              </form>
+            </div>
             <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
               <span class="soft-badge {{ 'status-active' if proxmox_ready_ok else 'status-disabled' }}">
                 <i class="bi bi-hdd-network me-2"></i>{{ 'Proxmox API ready' if proxmox_ready_ok else proxmox_ready_message }}
@@ -758,6 +811,7 @@ def ensure_storage() -> None:
     GENERATED_AUTH_DIR.mkdir(parents=True, exist_ok=True)
     BASE_COMPOSE.parent.mkdir(parents=True, exist_ok=True)
     ADMIN_USER_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PROXMOX_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     if not USERS_FILE.exists():
         USERS_FILE.write_text("[]\n", encoding="utf-8")
     if not GENERATED_COMPOSE.exists():
@@ -766,6 +820,8 @@ def ensure_storage() -> None:
         GENERATED_PROXY.write_text("# Generated routes for user workspaces will be written here by the admin UI.\n", encoding="utf-8")
     if not BASE_COMPOSE.exists():
         BASE_COMPOSE.write_text(render_base_compose(), encoding="utf-8")
+    if not PROXMOX_SETTINGS_FILE.exists():
+        PROXMOX_SETTINGS_FILE.write_text("{}\n", encoding="utf-8")
     if proxmox_enabled():
         clear_generated_proxy_files()
     ensure_admin_credentials()
@@ -1056,13 +1112,66 @@ def proxmox_enabled() -> bool:
     return PROVISIONER_MODE == "proxmox_vm"
 
 
-def proxmox_ready() -> tuple[bool, str]:
+def proxmox_default_settings() -> dict:
+    return {
+        "api_url": PROXMOX_API_URL,
+        "node": PROXMOX_NODE,
+        "token_id": PROXMOX_TOKEN_ID,
+        "token_secret": PROXMOX_TOKEN_SECRET,
+        "template_vmid": PROXMOX_TEMPLATE_VMID,
+        "vm_cores": PROXMOX_VM_CORES,
+        "vm_memory_mb": PROXMOX_VM_MEMORY_MB,
+        "vm_disk": PROXMOX_VM_DISK,
+        "net_bridge": PROXMOX_NET_BRIDGE,
+        "vm_start_on_create": PROXMOX_VM_START_ON_CREATE,
+        "verify_tls": PROXMOX_VERIFY_TLS,
+        "desktop_url_template": PROXMOX_DESKTOP_URL_TEMPLATE,
+    }
+
+
+def proxmox_settings() -> dict:
+    defaults = proxmox_default_settings()
+    try:
+        stored = json.loads(PROXMOX_SETTINGS_FILE.read_text(encoding="utf-8")) if PROXMOX_SETTINGS_FILE.exists() else {}
+    except json.JSONDecodeError:
+        stored = {}
+    if not isinstance(stored, dict):
+        stored = {}
+    merged = defaults.copy()
+    merged.update(stored)
+    merged["api_url"] = str(merged.get("api_url", "")).strip().rstrip("/")
+    merged["node"] = str(merged.get("node", "")).strip()
+    merged["token_id"] = str(merged.get("token_id", "")).strip()
+    merged["token_secret"] = str(merged.get("token_secret", "")).strip()
+    merged["template_vmid"] = str(merged.get("template_vmid", "")).strip()
+    merged["vm_cores"] = parse_int_or_default(str(merged.get("vm_cores", PROXMOX_VM_CORES)), PROXMOX_VM_CORES, 1, 128, "VM cores")
+    merged["vm_memory_mb"] = parse_int_or_default(
+        str(merged.get("vm_memory_mb", PROXMOX_VM_MEMORY_MB)),
+        PROXMOX_VM_MEMORY_MB,
+        512,
+        1048576,
+        "VM memory",
+    )
+    merged["vm_disk"] = str(merged.get("vm_disk", "")).strip()
+    merged["net_bridge"] = str(merged.get("net_bridge", PROXMOX_NET_BRIDGE)).strip() or PROXMOX_NET_BRIDGE
+    merged["vm_start_on_create"] = str(merged.get("vm_start_on_create", "true")).strip().lower() in {"1", "true", "yes"}
+    merged["verify_tls"] = str(merged.get("verify_tls", "true")).strip().lower() in {"1", "true", "yes"}
+    merged["desktop_url_template"] = str(merged.get("desktop_url_template", PROXMOX_DESKTOP_URL_TEMPLATE)).strip()
+    return merged
+
+
+def save_proxmox_settings(values: dict) -> None:
+    PROXMOX_SETTINGS_FILE.write_text(json.dumps(values, indent=2) + "\n", encoding="utf-8")
+
+
+def proxmox_ready(settings: dict | None = None) -> tuple[bool, str]:
+    config = settings or proxmox_settings()
     required = {
-        "MWC_PROXMOX_API_URL": PROXMOX_API_URL,
-        "MWC_PROXMOX_NODE": PROXMOX_NODE,
-        "MWC_PROXMOX_TOKEN_ID": PROXMOX_TOKEN_ID,
-        "MWC_PROXMOX_TOKEN_SECRET": PROXMOX_TOKEN_SECRET,
-        "MWC_PROXMOX_TEMPLATE_VMID": PROXMOX_TEMPLATE_VMID,
+        "api_url": config.get("api_url", ""),
+        "node": config.get("node", ""),
+        "token_id": config.get("token_id", ""),
+        "token_secret": config.get("token_secret", ""),
+        "template_vmid": config.get("template_vmid", ""),
     }
     missing = [key for key, value in required.items() if not value]
     if missing:
@@ -1070,25 +1179,25 @@ def proxmox_ready() -> tuple[bool, str]:
     return True, ""
 
 
-def proxmox_headers() -> dict:
+def proxmox_headers(settings: dict) -> dict:
     return {
-        "Authorization": f"PVEAPIToken={PROXMOX_TOKEN_ID}={PROXMOX_TOKEN_SECRET}",
+        "Authorization": f"PVEAPIToken={settings['token_id']}={settings['token_secret']}",
         "Content-Type": "application/x-www-form-urlencoded",
     }
 
 
-def proxmox_request(method: str, path: str, data: dict | None = None) -> dict:
+def proxmox_request(method: str, path: str, settings: dict, data: dict | None = None) -> dict:
     payload = None
     if data is not None:
         payload = urlencode(data).encode("utf-8")
     req = Request(
-        url=f"{PROXMOX_API_URL}/api2/json{path}",
+        url=f"{settings['api_url']}/api2/json{path}",
         data=payload,
         method=method,
-        headers=proxmox_headers(),
+        headers=proxmox_headers(settings),
     )
     context = ssl.create_default_context()
-    if not PROXMOX_VERIFY_TLS:
+    if not settings.get("verify_tls", True):
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
     try:
@@ -1103,49 +1212,53 @@ def proxmox_request(method: str, path: str, data: dict | None = None) -> dict:
     return parsed.get("data", {})
 
 
-def proxmox_next_vmid() -> int:
-    value = proxmox_request("GET", "/cluster/nextid")
+def proxmox_next_vmid(settings: dict) -> int:
+    value = proxmox_request("GET", "/cluster/nextid", settings)
     return int(value)
 
 
-def proxmox_vm_access_url(vmid: int) -> str:
-    return PROXMOX_DESKTOP_URL_TEMPLATE.format(api_url=PROXMOX_API_URL, node=PROXMOX_NODE, vmid=vmid)
+def proxmox_vm_access_url(settings: dict, vmid: int, node: str) -> str:
+    return settings["desktop_url_template"].format(api_url=settings["api_url"], node=node, vmid=vmid)
 
 
 def proxmox_health_check() -> tuple[bool, str]:
-    ok, message = proxmox_ready()
+    settings = proxmox_settings()
+    ok, message = proxmox_ready(settings)
     if not ok:
         return False, message
     try:
-        next_id = proxmox_next_vmid()
-        proxmox_request("GET", f"/nodes/{PROXMOX_NODE}/qemu/{PROXMOX_TEMPLATE_VMID}/status/current")
-        return True, f"Proxmox API reachable (next VMID {next_id}, template {PROXMOX_TEMPLATE_VMID} accessible)."
+        next_id = proxmox_next_vmid(settings)
+        proxmox_request("GET", f"/nodes/{settings['node']}/qemu/{settings['template_vmid']}/status/current", settings)
+        return True, f"Proxmox API reachable (next VMID {next_id}, template {settings['template_vmid']} accessible)."
     except Exception as exc:
         return False, f"Proxmox API test failed: {exc}"
 
 
 def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
-    ok, message = proxmox_ready()
+    settings = proxmox_settings()
+    ok, message = proxmox_ready(settings)
     if not ok:
         return False, message
     try:
-        vmid = proxmox_next_vmid()
+        vmid = proxmox_next_vmid(settings)
+        node = settings["node"]
         proxmox_request(
             "POST",
-            f"/nodes/{PROXMOX_NODE}/qemu/{PROXMOX_TEMPLATE_VMID}/clone",
+            f"/nodes/{node}/qemu/{settings['template_vmid']}/clone",
+            settings,
             {
                 "newid": vmid,
                 "name": f"mwc-{user['route']}",
-                "target": PROXMOX_NODE,
+                "target": node,
                 "full": 1,
             },
         )
         profile = user.get("proxmox_profile", {})
-        cores = int(profile.get("cores", PROXMOX_VM_CORES))
-        memory_mb = int(profile.get("memory_mb", PROXMOX_VM_MEMORY_MB))
-        bridge = profile.get("bridge", PROXMOX_NET_BRIDGE)
-        disk_override = profile.get("disk", PROXMOX_VM_DISK)
-        start_on_create = bool(profile.get("start_on_create", PROXMOX_VM_START_ON_CREATE))
+        cores = int(profile.get("cores", settings["vm_cores"]))
+        memory_mb = int(profile.get("memory_mb", settings["vm_memory_mb"]))
+        bridge = profile.get("bridge", settings["net_bridge"])
+        disk_override = profile.get("disk", settings["vm_disk"])
+        start_on_create = bool(profile.get("start_on_create", settings["vm_start_on_create"]))
 
         config_payload = {
             "cores": cores,
@@ -1157,17 +1270,18 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
             config_payload["scsi0"] = disk_override
         proxmox_request(
             "POST",
-            f"/nodes/{PROXMOX_NODE}/qemu/{vmid}/config",
+            f"/nodes/{node}/qemu/{vmid}/config",
+            settings,
             config_payload,
         )
         if user.get("enabled", True) and start_on_create:
-            proxmox_request("POST", f"/nodes/{PROXMOX_NODE}/qemu/{vmid}/status/start", {})
+            proxmox_request("POST", f"/nodes/{node}/qemu/{vmid}/status/start", settings, {})
         user["provider"] = "proxmox_vm"
         user["proxmox"] = {
             "vmid": vmid,
-            "node": PROXMOX_NODE,
+            "node": node,
             "name": f"mwc-{user['route']}",
-            "access_url": proxmox_vm_access_url(vmid),
+            "access_url": proxmox_vm_access_url(settings, vmid, node),
         }
         return True, f"Proxmox VM {vmid} created."
     except Exception as exc:
@@ -1175,30 +1289,32 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
 
 
 def proxmox_vm_action(user: dict, action: str) -> tuple[bool, str]:
+    settings = proxmox_settings()
     info = user.get("proxmox", {})
     vmid = info.get("vmid")
-    node = info.get("node") or PROXMOX_NODE
+    node = info.get("node") or settings.get("node", "")
     if not vmid:
         return False, "User has no linked Proxmox VM."
     try:
-        proxmox_request("POST", f"/nodes/{node}/qemu/{vmid}/status/{action}", {})
+        proxmox_request("POST", f"/nodes/{node}/qemu/{vmid}/status/{action}", settings, {})
         return True, f"VM {vmid} {action} requested."
     except Exception as exc:
         return False, f"Proxmox action '{action}' failed: {exc}"
 
 
 def proxmox_delete_vm(user: dict) -> tuple[bool, str]:
+    settings = proxmox_settings()
     info = user.get("proxmox", {})
     vmid = info.get("vmid")
-    node = info.get("node") or PROXMOX_NODE
+    node = info.get("node") or settings.get("node", "")
     if not vmid:
         return True, "No Proxmox VM linked."
     try:
-        proxmox_request("POST", f"/nodes/{node}/qemu/{vmid}/status/stop", {"timeout": 30})
+        proxmox_request("POST", f"/nodes/{node}/qemu/{vmid}/status/stop", settings, {"timeout": 30})
     except Exception:
         pass
     try:
-        proxmox_request("DELETE", f"/nodes/{node}/qemu/{vmid}", {"purge": 1, "destroy-unreferenced-disks": 1})
+        proxmox_request("DELETE", f"/nodes/{node}/qemu/{vmid}", settings, {"purge": 1, "destroy-unreferenced-disks": 1})
         return True, f"VM {vmid} deleted."
     except Exception as exc:
         return False, f"Proxmox VM delete failed: {exc}"
@@ -1322,6 +1438,7 @@ def index():
     tr = TRANSLATIONS[lang]
     users = load_users()
     flash_data = current_flash()
+    cfg = proxmox_settings()
     ready_ok, ready_message = proxmox_health_check() if proxmox_enabled() else (False, "")
     return render_template_string(
         PAGE_TEMPLATE,
@@ -1336,13 +1453,14 @@ def index():
         company_url=COMPANY_URL,
         admin_username=session.get("admin_username", "admin"),
         proxmox_mode=proxmox_enabled(),
+        proxmox_cfg=cfg,
         proxmox_ready_ok=ready_ok,
         proxmox_ready_message=ready_message,
-        proxmox_default_cores=PROXMOX_VM_CORES,
-        proxmox_default_memory_mb=PROXMOX_VM_MEMORY_MB,
-        proxmox_default_bridge=PROXMOX_NET_BRIDGE,
-        proxmox_default_disk=PROXMOX_VM_DISK,
-        proxmox_default_start_on_create=PROXMOX_VM_START_ON_CREATE,
+        proxmox_default_cores=cfg["vm_cores"],
+        proxmox_default_memory_mb=cfg["vm_memory_mb"],
+        proxmox_default_bridge=cfg["net_bridge"],
+        proxmox_default_disk=cfg["vm_disk"],
+        proxmox_default_start_on_create=cfg["vm_start_on_create"],
         copyright_year=datetime.utcnow().year,
         **flash_data,
     )
@@ -1357,25 +1475,45 @@ def proxmox_test():
     return redirect_with_message(message, error=not ok)
 
 
+@APP.post("/admin/proxmox/settings")
+@login_required
+def save_proxmox_settings_route():
+    if not proxmox_enabled():
+        return redirect_with_message("Proxmox VM mode is not enabled.", error=True)
+    try:
+        cfg = proxmox_settings()
+        cfg["api_url"] = request.form.get("cfg_api_url", "").strip().rstrip("/")
+        cfg["node"] = request.form.get("cfg_node", "").strip()
+        cfg["template_vmid"] = request.form.get("cfg_template_vmid", "").strip()
+        cfg["token_id"] = request.form.get("cfg_token_id", "").strip()
+        cfg["token_secret"] = request.form.get("cfg_token_secret", "").strip()
+        cfg["verify_tls"] = request.form.get("cfg_verify_tls") == "1"
+        save_proxmox_settings(cfg)
+    except Exception as exc:
+        return redirect_with_message(f"Saving Proxmox settings failed: {trim_output(str(exc))}", error=True)
+    return redirect_with_message("Proxmox settings saved.")
+
+
 @APP.post("/admin/users")
 @login_required
 def create_user():
     users = load_users()
+    cfg = proxmox_settings()
     try:
         username = validate_username(request.form["username"])
         route = slugify(request.form["route"])
         workspace_type = request.form["workspace_type"]
         network_mode = request.form["network_mode"]
         password = request.form["password"]
-        proxmox_cores = parse_int_or_default(request.form.get("proxmox_cores", ""), PROXMOX_VM_CORES, 1, 64, "vCPU cores")
+        proxmox_cores = parse_int_or_default(request.form.get("proxmox_cores", ""), cfg["vm_cores"], 1, 64, "vCPU cores")
         proxmox_memory_mb = parse_int_or_default(
             request.form.get("proxmox_memory_mb", ""),
-            PROXMOX_VM_MEMORY_MB,
+            cfg["vm_memory_mb"],
             512,
             1048576,
             "VM memory",
         )
-        proxmox_bridge = (request.form.get("proxmox_bridge", "") or PROXMOX_NET_BRIDGE).strip() or PROXMOX_NET_BRIDGE
+        proxmox_bridge = (request.form.get("proxmox_bridge", "") or cfg["net_bridge"]).strip() or cfg["net_bridge"]
         proxmox_disk = (request.form.get("proxmox_disk", "") or "").strip()
         proxmox_start_on_create = request.form.get("proxmox_start_on_create") == "1"
     except KeyError:

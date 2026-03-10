@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.4] - 2026-03-10
+
+### Changed
+- Moved Proxmox backend configuration from environment variables to persisted Admin UI settings
+- Added Proxmox settings form in the dashboard (API URL, node, token, template VMID, TLS verify)
+
+### Removed
+- Proxmox backend env configuration requirements from docs and compose examples
+
 ## [0.6.3] - 2026-03-10
 
 ### Fixed
