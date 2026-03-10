@@ -294,9 +294,13 @@ qm create "${VMID}" \
   --net0 "virtio,bridge=${BRIDGE}" \
   --agent 1 \
   --ostype l26 \
-  --scsihw virtio-scsi-pci \
-  --serial0 socket \
-  --vga serial0
+  --scsihw virtio-scsi-pci
+
+if [ "${DESKTOP_PROFILE}" = "none" ]; then
+  qm set "${VMID}" --serial0 socket --vga serial0
+else
+  qm set "${VMID}" --vga std
+fi
 
 echo "Importing disk to storage ${STORAGE}..."
 qm importdisk "${VMID}" "${IMG_PATH}" "${STORAGE}"
