@@ -4,15 +4,18 @@ set -eu
 # Create a Debian 13 cloud-init template VM on a Proxmox host.
 # Run this script directly on the Proxmox node as root.
 #
-# Example:
+# Guided mode:
+#   sh scripts/proxmox-create-debian13-template.sh --tui
+#
+# Non-interactive example:
 #   sh scripts/proxmox-create-debian13-template.sh \
 #     --vmid 9000 \
-#     --name debian13-desktop-base \
+#     --name debian13-cloud-template \
 #     --storage local-lvm \
-#     --ci-storage local-lvm \
 #     --bridge vmbr0 \
 #     --cores 2 \
 #     --memory 4096 \
+#     --disk-gb 32 \
 #     --ci-user admin
 
 VMID=9000
@@ -29,54 +32,56 @@ CI_PASSWORD=""
 SSH_KEY_FILE=""
 IPCONFIG0="ip=dhcp"
 FORCE=0
+TUI_MODE="auto"  # auto|on|off
+EXPLICIT_ARGS=0
 
 usage() {
   cat <<EOF
 Usage: $0 [options]
 
 Options:
-  --vmid <id>               Template VMID (default: ${VMID})
-  --name <name>             VM name (default: ${NAME})
-  --storage <id>            Target disk storage for VM disk (default: ${STORAGE})
-  --ci-storage <id>         Storage for cloud-init drive (default: same as --storage)
-  --bridge <name>           Network bridge (default: ${BRIDGE})
-  --cores <n>               vCPU cores (default: ${CORES})
-  --memory <mb>             RAM in MB (default: ${MEMORY})
-  --disk-gb <gb>            Resize imported disk to GB (default: ${DISK_GB})
-  --image-url <url>         Debian 13 cloud image URL
-  --ci-user <name>          cloud-init user (default: ${CI_USER})
-  --ci-password <password>  cloud-init password (optional)
-  --ssh-key-file <path>     Inject SSH public key file (optional)
-  --ipconfig0 <value>       cloud-init ipconfig0 (default: ${IPCONFIG0})
-  --force                   Destroy existing VMID if present
-  -h, --help                Show this help
+  --tui                    Start guided TUI wizard
+  --no-tui                 Disable wizard mode
+  --vmid <id>              Template VMID (default: ${VMID})
+  --name <name>            VM name (default: ${NAME})
+  --storage <id>           Target disk storage for VM disk (default: ${STORAGE})
+  --ci-storage <id>        Storage for cloud-init drive (default: same as --storage)
+  --bridge <name>          Network bridge (default: ${BRIDGE})
+  --cores <n>              vCPU cores (default: ${CORES})
+  --memory <mb>            RAM in MB (default: ${MEMORY})
+  --disk-gb <gb>           Resize imported disk to GB (default: ${DISK_GB})
+  --image-url <url>        Debian 13 cloud image URL
+  --ci-user <name>         cloud-init user (default: ${CI_USER})
+  --ci-password <password> cloud-init password (optional)
+  --ssh-key-file <path>    Inject SSH public key file (optional)
+  --ipconfig0 <value>      cloud-init ipconfig0 (default: ${IPCONFIG0})
+  --force                  Destroy existing VMID if present
+  -h, --help               Show this help
 EOF
 }
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --vmid) VMID="$2"; shift 2 ;;
-    --name) NAME="$2"; shift 2 ;;
-    --storage) STORAGE="$2"; shift 2 ;;
-    --ci-storage) CI_STORAGE="$2"; shift 2 ;;
-    --bridge) BRIDGE="$2"; shift 2 ;;
-    --cores) CORES="$2"; shift 2 ;;
-    --memory) MEMORY="$2"; shift 2 ;;
-    --disk-gb) DISK_GB="$2"; shift 2 ;;
-    --image-url) IMAGE_URL="$2"; shift 2 ;;
-    --ci-user) CI_USER="$2"; shift 2 ;;
-    --ci-password) CI_PASSWORD="$2"; shift 2 ;;
-    --ssh-key-file) SSH_KEY_FILE="$2"; shift 2 ;;
-    --ipconfig0) IPCONFIG0="$2"; shift 2 ;;
-    --force) FORCE=1; shift 1 ;;
+    --tui) TUI_MODE="on"; shift 1 ;;
+    --no-tui) TUI_MODE="off"; shift 1 ;;
+    --vmid) VMID="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --name) NAME="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --storage) STORAGE="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --ci-storage) CI_STORAGE="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --bridge) BRIDGE="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --cores) CORES="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --memory) MEMORY="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --disk-gb) DISK_GB="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --image-url) IMAGE_URL="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --ci-user) CI_USER="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --ci-password) CI_PASSWORD="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --ssh-key-file) SSH_KEY_FILE="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --ipconfig0) IPCONFIG0="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --force) FORCE=1; EXPLICIT_ARGS=1; shift 1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
   esac
 done
-
-if [ -z "${CI_STORAGE}" ]; then
-  CI_STORAGE="${STORAGE}"
-fi
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -101,13 +106,120 @@ else
   exit 1
 fi
 
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run as root on the Proxmox host." >&2
+  exit 1
+fi
+
+UI_BACKEND="plain"
+if [ -t 0 ] && [ -t 1 ]; then
+  if command -v whiptail >/dev/null 2>&1; then
+    UI_BACKEND="whiptail"
+  elif command -v dialog >/dev/null 2>&1; then
+    UI_BACKEND="dialog"
+  fi
+fi
+
+ui_input() {
+  prompt="$1"
+  default="$2"
+  case "$UI_BACKEND" in
+    whiptail)
+      result="$(whiptail --title "Debian 13 Template Wizard" --inputbox "$prompt" 10 78 "$default" 3>&1 1>&2 2>&3)" || exit 1
+      ;;
+    dialog)
+      result="$(dialog --stdout --title "Debian 13 Template Wizard" --inputbox "$prompt" 10 78 "$default")" || exit 1
+      ;;
+    *)
+      printf "%s [%s]: " "$prompt" "$default"
+      read -r result
+      ;;
+  esac
+  if [ -z "$result" ]; then
+    result="$default"
+  fi
+  printf "%s" "$result"
+}
+
+ui_password() {
+  prompt="$1"
+  case "$UI_BACKEND" in
+    whiptail)
+      result="$(whiptail --title "Debian 13 Template Wizard" --passwordbox "$prompt" 10 78 3>&1 1>&2 2>&3)" || exit 1
+      ;;
+    dialog)
+      result="$(dialog --stdout --title "Debian 13 Template Wizard" --passwordbox "$prompt" 10 78)" || exit 1
+      ;;
+    *)
+      printf "%s (leave empty to skip): " "$prompt"
+      stty -echo
+      read -r result
+      stty echo
+      printf "\n"
+      ;;
+  esac
+  printf "%s" "$result"
+}
+
+ui_confirm() {
+  prompt="$1"
+  case "$UI_BACKEND" in
+    whiptail)
+      whiptail --title "Debian 13 Template Wizard" --yesno "$prompt" 10 78
+      return $?
+      ;;
+    dialog)
+      dialog --stdout --title "Debian 13 Template Wizard" --yesno "$prompt" 10 78
+      return $?
+      ;;
+    *)
+      printf "%s [y/N]: " "$prompt"
+      read -r ans
+      case "${ans:-n}" in
+        y|Y|yes|YES) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
+  esac
+}
+
+run_wizard() {
+  VMID="$(ui_input "Template VMID" "$VMID")"
+  NAME="$(ui_input "Template VM name" "$NAME")"
+  STORAGE="$(ui_input "Target storage (disk import)" "$STORAGE")"
+  CI_STORAGE="$(ui_input "Cloud-init storage (empty = same as target storage)" "$CI_STORAGE")"
+  BRIDGE="$(ui_input "Network bridge" "$BRIDGE")"
+  CORES="$(ui_input "vCPU cores" "$CORES")"
+  MEMORY="$(ui_input "Memory in MB" "$MEMORY")"
+  DISK_GB="$(ui_input "Disk size in GB after resize" "$DISK_GB")"
+  IMAGE_URL="$(ui_input "Debian 13 image URL" "$IMAGE_URL")"
+  CI_USER="$(ui_input "Cloud-init user" "$CI_USER")"
+  CI_PASSWORD="$(ui_password "Cloud-init password")"
+  SSH_KEY_FILE="$(ui_input "SSH public key file path (optional)" "$SSH_KEY_FILE")"
+  IPCONFIG0="$(ui_input "Cloud-init ipconfig0" "$IPCONFIG0")"
+
+  if ui_confirm "Replace an existing VM with same VMID if present?"; then
+    FORCE=1
+  else
+    FORCE=0
+  fi
+}
+
+if [ "$TUI_MODE" = "on" ] || { [ "$TUI_MODE" = "auto" ] && [ "$EXPLICIT_ARGS" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; }; then
+  run_wizard
+fi
+
+if [ -z "${CI_STORAGE}" ]; then
+  CI_STORAGE="${STORAGE}"
+fi
+
 if qm status "${VMID}" >/dev/null 2>&1; then
   if [ "${FORCE}" -eq 1 ]; then
-    echo "VMID ${VMID} exists, removing because --force was set..."
+    echo "VMID ${VMID} exists, removing because force was enabled..."
     qm stop "${VMID}" >/dev/null 2>&1 || true
     qm destroy "${VMID}" --destroy-unreferenced-disks 1 --purge 1
   else
-    echo "VMID ${VMID} already exists. Use --force to replace it." >&2
+    echo "VMID ${VMID} already exists. Use --force or --tui and enable replace mode." >&2
     exit 1
   fi
 fi

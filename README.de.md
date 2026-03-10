@@ -199,6 +199,12 @@ Direkt von GitHub auf dem Proxmox-Host:
 curl -fsSL https://raw.githubusercontent.com/itsh-neumeier/mobileworkspace-linux/main/scripts/proxmox-create-debian13-template.sh | sh -s -- --vmid 9000 --name debian13-cloud-template
 ```
 
+Geführter TUI-Wizard:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/itsh-neumeier/mobileworkspace-linux/main/scripts/proxmox-create-debian13-template.sh | sh -s -- --tui
+```
+
 ## Optionaler Externer Proxy
 
 Wenn du den Dienst extern veröffentlichen willst, kannst du zusätzlich einen Reverse Proxy wie Zoraxy vor diesen Stack setzen.

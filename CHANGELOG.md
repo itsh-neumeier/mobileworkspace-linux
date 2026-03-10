@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.8] - 2026-03-10
+
+### Added
+- Guided TUI wizard mode (`--tui`) for `proxmox-create-debian13-template.sh` with `whiptail/dialog` and plain prompt fallback
+
+### Changed
+- Proxmox template script now supports both interactive and non-interactive creation workflows
+
 ## [0.6.7] - 2026-03-10
 
 ### Added
