@@ -8,12 +8,11 @@ import time
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from flask import Flask, redirect, render_template_string, request, session, url_for
-from passlib.apache import HtpasswdFile
 from passlib.hash import bcrypt as passlib_bcrypt
 
 
@@ -44,7 +43,6 @@ GENERATED_COMPOSE = Path(
     os.environ.get("MWC_GENERATED_COMPOSE", PROJECT_ROOT / "generated" / "docker-compose.users.yml")
 )
 GENERATED_PROXY = Path(os.environ.get("MWC_GENERATED_PROXY", PROJECT_ROOT / "generated" / "nginx.users.conf"))
-GENERATED_AUTH_DIR = Path(os.environ.get("MWC_GENERATED_AUTH_DIR", PROJECT_ROOT / "generated" / "auth"))
 BASE_COMPOSE = Path(os.environ.get("MWC_BASE_COMPOSE", PROJECT_ROOT / "base" / "docker-compose.base.yml"))
 DOMAIN_OR_HOST = os.environ.get("MWC_DOMAIN_OR_HOST", "localhost")
 TIMEZONE = os.environ.get("MWC_TIMEZONE", "Europe/Berlin")
@@ -152,6 +150,13 @@ TRANSLATIONS = {
         "proxmox_vm_mode": "Proxmox VM",
         "vmid_min": "VMID Min",
         "vmid_max": "VMID Max",
+        "dashboard": "Dashboard",
+        "settings": "Settings",
+        "open_workspace": "Open Workspace",
+        "workspace_login": "Workspace Login",
+        "workspace_login_help": "Sign in with the workspace user credentials to access this workspace.",
+        "invalid_workspace_credentials": "Invalid workspace credentials.",
+        "workspace_not_found": "Workspace was not found or is disabled.",
     },
     "de": {
         "product_name": "Mobile Web Console Hub",
@@ -217,6 +222,13 @@ TRANSLATIONS = {
         "proxmox_vm_mode": "Proxmox VM",
         "vmid_min": "VMID Min",
         "vmid_max": "VMID Max",
+        "dashboard": "Dashboard",
+        "settings": "Einstellungen",
+        "open_workspace": "Workspace öffnen",
+        "workspace_login": "Workspace Anmeldung",
+        "workspace_login_help": "Melde dich mit den Workspace-Benutzerdaten an, um den Workspace zu öffnen.",
+        "invalid_workspace_credentials": "Ungültige Workspace-Anmeldedaten.",
+        "workspace_not_found": "Workspace wurde nicht gefunden oder ist deaktiviert.",
     },
 }
 
@@ -379,6 +391,8 @@ PAGE_TEMPLATE = """
             <option value="en" {{ 'selected' if lang == 'en' else '' }}>🇬🇧 English</option>
             <option value="de" {{ 'selected' if lang == 'de' else '' }}>🇩🇪 Deutsch</option>
           </select>
+          <a class="btn btn-outline-secondary" href="{{ url_for('index', lang=lang) }}"><i class="bi bi-grid-1x2-fill me-2"></i>{{ tr.dashboard }}</a>
+          <a class="btn btn-outline-secondary" href="{{ url_for('proxmox_settings_page', lang=lang) }}"><i class="bi bi-hdd-network me-2"></i>Proxmox {{ tr.settings }}</a>
           <span class="soft-badge"><i class="bi bi-person-badge me-2"></i>{{ admin_username }}</span>
           <button class="btn btn-outline-secondary theme-toggle" type="button" id="themeToggle" aria-label="Toggle theme">
             <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
@@ -423,55 +437,11 @@ PAGE_TEMPLATE = """
             <div class="alert {{ 'alert-danger' if flash_error else 'alert-success' }} rounded-4" role="alert">{{ flash }}</div>
             {% endif %}
             <div class="border rounded-4 p-3 mb-3">
-              <div class="fw-semibold mb-3">{{ tr.proxmox_backend_settings }}</div>
-              <form method="post" action="{{ url_for('save_proxmox_settings_route') }}">
-                <div class="row g-3">
-                  <div class="col-12">
-                    <label class="form-label fw-semibold" for="cfg_provisioner_mode">{{ tr.provisioner_mode }}</label>
-                    <select class="form-select" id="cfg_provisioner_mode" name="cfg_provisioner_mode">
-                      <option value="docker" {{ 'selected' if proxmox_cfg.provisioner_mode == 'docker' else '' }}>{{ tr.docker_mode }}</option>
-                      <option value="proxmox_vm" {{ 'selected' if proxmox_cfg.provisioner_mode == 'proxmox_vm' else '' }}>{{ tr.proxmox_vm_mode }}</option>
-                    </select>
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label fw-semibold" for="cfg_api_url">{{ tr.proxmox_api_url }}</label>
-                    <input class="form-control" id="cfg_api_url" name="cfg_api_url" placeholder="https://proxmox.local:8006" value="{{ proxmox_cfg.api_url }}">
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label fw-semibold" for="cfg_node">{{ tr.proxmox_node }}</label>
-                    <input class="form-control" id="cfg_node" name="cfg_node" value="{{ proxmox_cfg.node }}">
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label fw-semibold" for="cfg_template_vmid">{{ tr.proxmox_template_vmid }}</label>
-                    <input class="form-control" id="cfg_template_vmid" name="cfg_template_vmid" value="{{ proxmox_cfg.template_vmid }}">
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label fw-semibold" for="cfg_vmid_min">{{ tr.vmid_min }}</label>
-                    <input class="form-control" id="cfg_vmid_min" name="cfg_vmid_min" value="{{ proxmox_cfg.vmid_min }}" placeholder="100">
-                  </div>
-                  <div class="col-6">
-                    <label class="form-label fw-semibold" for="cfg_vmid_max">{{ tr.vmid_max }}</label>
-                    <input class="form-control" id="cfg_vmid_max" name="cfg_vmid_max" value="{{ proxmox_cfg.vmid_max }}" placeholder="999999">
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label fw-semibold" for="cfg_token_id">{{ tr.proxmox_token_id }}</label>
-                    <input class="form-control" id="cfg_token_id" name="cfg_token_id" value="{{ proxmox_cfg.token_id }}">
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label fw-semibold" for="cfg_token_secret">{{ tr.proxmox_token_secret }}</label>
-                    <input class="form-control" id="cfg_token_secret" name="cfg_token_secret" type="password" value="{{ proxmox_cfg.token_secret }}">
-                  </div>
-                  <div class="col-12">
-                    <div class="form-check">
-                      <input class="form-check-input" type="checkbox" id="cfg_verify_tls" name="cfg_verify_tls" value="1" {{ 'checked' if proxmox_cfg.verify_tls else '' }}>
-                      <label class="form-check-label" for="cfg_verify_tls">{{ tr.proxmox_verify_tls }}</label>
-                    </div>
-                  </div>
-                </div>
-                <button class="btn btn-outline-secondary mt-3" type="submit">
-                  <i class="bi bi-save me-2"></i>{{ tr.save_proxmox_settings }}
-                </button>
-              </form>
+              <div class="fw-semibold mb-2">Proxmox</div>
+              <p class="text-body-secondary small mb-3">Backend mode, VM template, VMID range, and server details are now grouped on a dedicated settings page.</p>
+              <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('proxmox_settings_page', lang=lang) }}">
+                <i class="bi bi-sliders me-2"></i>Proxmox {{ tr.settings }}
+              </a>
             </div>
             {% if proxmox_mode %}
             <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -601,19 +571,22 @@ PAGE_TEMPLATE = """
                         <i class="bi bi-person-circle me-2"></i>{{ user.proxmox_profile.guest_user or user.username }}
                       </div>
                       {% endif %}
-                      <div class="url-pill px-3 py-2 d-inline-flex align-items-center">
+                      <a class="url-pill px-3 py-2 d-inline-flex align-items-center text-decoration-none" href="{{ user.proxmox.access_url }}" target="_blank" rel="noopener noreferrer">
                         <i class="bi bi-link-45deg me-2"></i>{{ user.proxmox.access_url }}
-                      </div>
+                      </a>
                       {% else %}
                       <div class="soft-badge mb-3 d-inline-flex align-items-center">
                         <i class="bi bi-box-seam-fill me-2"></i>{{ user.container_name }}
                       </div>
-                      <div class="url-pill px-3 py-2 d-inline-flex align-items-center">
+                      <a class="url-pill px-3 py-2 d-inline-flex align-items-center text-decoration-none" href="{{ user.public_url }}" target="_blank" rel="noopener noreferrer">
                         <i class="bi bi-link-45deg me-2"></i>{{ user.public_url }}
-                      </div>
+                      </a>
                       {% endif %}
                     </div>
                     <div class="d-flex flex-wrap align-items-start justify-content-lg-end gap-2">
+                      <a class="btn btn-primary" href="{{ user.public_url }}" target="_blank" rel="noopener noreferrer">
+                        <i class="bi bi-box-arrow-up-right me-2"></i>{{ tr.open_workspace }}
+                      </a>
                       {% if user.enabled %}
                       <form method="post" action="{{ url_for('toggle_user', user_id=user.id, action='disable') }}">
                         <button class="btn btn-outline-secondary" type="submit">
@@ -848,11 +821,167 @@ CHANGE_PASSWORD_TEMPLATE = """
 </html>
 """
 
+USER_LOGIN_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tr.product_name }} - {{ tr.workspace_login }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top left, rgba(59,130,246,.18), transparent 26%), linear-gradient(180deg, #eef4ff 0%, #dfe9f8 100%);
+      font-family: "Segoe UI", sans-serif;
+    }
+    .panel {
+      width: min(520px, calc(100vw - 2rem));
+      border-radius: 1.5rem;
+      border: 0;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+      background: rgba(255,255,255,.95);
+    }
+  </style>
+</head>
+<body>
+  <div class="card panel p-4 p-lg-5">
+    <h1 class="h3 mb-2">{{ tr.workspace_login }}</h1>
+    <p class="text-body-secondary mb-4">{{ tr.workspace_login_help }}</p>
+    {% if error %}
+    <div class="alert alert-danger rounded-4" role="alert">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="{{ url_for('user_login', lang=lang) }}">
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="username">{{ tr.username }}</label>
+        <input class="form-control form-control-lg rounded-4" id="username" name="username" required autofocus>
+      </div>
+      <div class="mb-4">
+        <label class="form-label fw-semibold" for="password">{{ tr.password }}</label>
+        <input class="form-control form-control-lg rounded-4" id="password" name="password" type="password" required>
+      </div>
+      <button class="btn btn-primary btn-lg w-100 rounded-pill" type="submit">{{ tr.sign_in }}</button>
+    </form>
+  </div>
+</body>
+</html>
+"""
+
+USER_DASHBOARD_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tr.product_name }} - Workspaces</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <div class="text-uppercase small fw-semibold text-primary">{{ tr.product_name }}</div>
+        <h1 class="h3 mb-0">{{ session_user }}</h1>
+      </div>
+      <form method="post" action="{{ url_for('user_logout', lang=lang) }}">
+        <button class="btn btn-outline-secondary" type="submit">{{ tr.logout }}</button>
+      </form>
+    </div>
+    <div class="row g-3">
+      {% for user in users %}
+      <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-4">
+          <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+              <div class="fw-semibold">{{ user.route_path }}</div>
+              <div class="text-body-secondary small">{{ user.workspace_type }} · {{ user.network_mode }}</div>
+            </div>
+            <a class="btn btn-primary" href="{{ user.public_url }}" target="_blank" rel="noopener noreferrer">{{ tr.open_workspace }}</a>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+PROXMOX_SETTINGS_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tr.product_name }} - Proxmox {{ tr.settings }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-4 py-lg-5">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+      <div>
+        <div class="text-uppercase small fw-semibold text-primary">{{ tr.product_name }}</div>
+        <h1 class="h3 mb-0">Proxmox {{ tr.settings }}</h1>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{{ url_for('index', lang=lang) }}"><i class="bi bi-grid-1x2-fill me-2"></i>{{ tr.dashboard }}</a>
+        <form method="post" action="{{ url_for('logout') }}">
+          <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-box-arrow-right me-2"></i>{{ tr.logout }}</button>
+        </form>
+      </div>
+    </div>
+    {% if flash %}
+    <div class="alert {{ 'alert-danger' if flash_error else 'alert-success' }} rounded-4" role="alert">{{ flash }}</div>
+    {% endif %}
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-md-4"><div class="card border-0 shadow-sm rounded-4"><div class="card-body"><div class="text-body-secondary small">CPU</div><div class="h4 mb-0">{{ usage.cpu_percent if usage else 0 }}%</div></div></div></div>
+      <div class="col-12 col-md-4"><div class="card border-0 shadow-sm rounded-4"><div class="card-body"><div class="text-body-secondary small">RAM</div><div class="h4 mb-0">{{ usage.memory_used_gb if usage else 0 }} / {{ usage.memory_total_gb if usage else 0 }} GB</div></div></div></div>
+      <div class="col-12 col-md-4"><div class="card border-0 shadow-sm rounded-4"><div class="card-body"><div class="text-body-secondary small">Disk</div><div class="h4 mb-0">{{ usage.disk_used_gb if usage else 0 }} / {{ usage.disk_total_gb if usage else 0 }} GB</div></div></div></div>
+    </div>
+    <div class="card border-0 shadow-sm rounded-4">
+      <div class="card-body p-4">
+        <form method="post" action="{{ url_for('save_proxmox_settings_route') }}">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold" for="cfg_provisioner_mode">{{ tr.provisioner_mode }}</label>
+              <select class="form-select" id="cfg_provisioner_mode" name="cfg_provisioner_mode">
+                <option value="docker" {{ 'selected' if proxmox_cfg.provisioner_mode == 'docker' else '' }}>{{ tr.docker_mode }}</option>
+                <option value="proxmox_vm" {{ 'selected' if proxmox_cfg.provisioner_mode == 'proxmox_vm' else '' }}>{{ tr.proxmox_vm_mode }}</option>
+              </select>
+            </div>
+            <div class="col-12"><label class="form-label fw-semibold" for="cfg_api_url">{{ tr.proxmox_api_url }}</label><input class="form-control" id="cfg_api_url" name="cfg_api_url" value="{{ proxmox_cfg.api_url }}" placeholder="https://proxmox.local:8006"></div>
+            <div class="col-6"><label class="form-label fw-semibold" for="cfg_node">{{ tr.proxmox_node }}</label><input class="form-control" id="cfg_node" name="cfg_node" value="{{ proxmox_cfg.node }}"></div>
+            <div class="col-6"><label class="form-label fw-semibold" for="cfg_template_vmid">{{ tr.proxmox_template_vmid }}</label><input class="form-control" id="cfg_template_vmid" name="cfg_template_vmid" value="{{ proxmox_cfg.template_vmid }}"></div>
+            <div class="col-6"><label class="form-label fw-semibold" for="cfg_vmid_min">{{ tr.vmid_min }}</label><input class="form-control" id="cfg_vmid_min" name="cfg_vmid_min" value="{{ proxmox_cfg.vmid_min }}"></div>
+            <div class="col-6"><label class="form-label fw-semibold" for="cfg_vmid_max">{{ tr.vmid_max }}</label><input class="form-control" id="cfg_vmid_max" name="cfg_vmid_max" value="{{ proxmox_cfg.vmid_max }}"></div>
+            <div class="col-12"><label class="form-label fw-semibold" for="cfg_token_id">{{ tr.proxmox_token_id }}</label><input class="form-control" id="cfg_token_id" name="cfg_token_id" value="{{ proxmox_cfg.token_id }}"></div>
+            <div class="col-12"><label class="form-label fw-semibold" for="cfg_token_secret">{{ tr.proxmox_token_secret }}</label><input class="form-control" id="cfg_token_secret" name="cfg_token_secret" type="password" value="{{ proxmox_cfg.token_secret }}"></div>
+            <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="cfg_verify_tls" name="cfg_verify_tls" value="1" {{ 'checked' if proxmox_cfg.verify_tls else '' }}>
+                <label class="form-check-label" for="cfg_verify_tls">{{ tr.proxmox_verify_tls }}</label>
+              </div>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-save me-2"></i>{{ tr.save_proxmox_settings }}</button>
+            <button class="btn btn-outline-secondary" formaction="{{ url_for('proxmox_test') }}" formmethod="post" type="submit"><i class="bi bi-plug me-2"></i>{{ tr.proxmox_api_test }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
 
 def ensure_storage() -> None:
     USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
     GENERATED_COMPOSE.parent.mkdir(parents=True, exist_ok=True)
-    GENERATED_AUTH_DIR.mkdir(parents=True, exist_ok=True)
     BASE_COMPOSE.parent.mkdir(parents=True, exist_ok=True)
     ADMIN_USER_FILE.parent.mkdir(parents=True, exist_ok=True)
     PROXMOX_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -1046,25 +1175,42 @@ def actual_network_name(network: str) -> str:
     }[network]
 
 
-def auth_file_for_user(user: dict) -> Path:
-    return GENERATED_AUTH_DIR / f"{user['route']}.htpasswd"
-
-
 def nginx_block(user: dict) -> str:
-    auth_file = auth_file_for_user(user)
-    auth_file.parent.mkdir(parents=True, exist_ok=True)
-    ht = HtpasswdFile(str(auth_file), new=True)
-    ht.set_password(user["username"], user["password"])
-    ht.save()
     route = user["route_path"].rstrip("/")
     return f"""
 location ^~ {route}/ {{
-    auth_basic "Mobile Web Console Hub";
-    auth_basic_user_file {auth_file.as_posix()};
+    auth_request /user/auth/{user["route"]}/;
+    error_page 401 =302 /user/login/?next=$request_uri;
     set $workspace_upstream http://{user["container_name"]}:{upstream_port(user)};
     proxy_pass $workspace_upstream;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}}
+"""
+
+
+def proxmox_tunnel_block(settings: dict) -> str:
+    api_url = str(settings.get("api_url", "")).strip()
+    if not api_url:
+        return ""
+    parsed = urlparse(api_url)
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    verify_tls = "on" if settings.get("verify_tls", True) else "off"
+    upstream = api_url.rstrip("/") + "/"
+    host_header = parsed.netloc
+    return f"""
+location ^~ /pve/ {{
+    proxy_pass {upstream};
+    proxy_http_version 1.1;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify {verify_tls};
+    proxy_set_header Host {host_header};
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
@@ -1080,21 +1226,29 @@ def upstream_port(user: dict) -> int:
 
 def write_generated_files(users) -> None:
     enabled = [user for user in users if user.get("enabled", True)]
+    docker_users = [user for user in enabled if user.get("provider", "docker") == "docker"]
+    proxy_parts = []
+    tunnel = proxmox_tunnel_block(proxmox_settings())
+    if tunnel:
+        proxy_parts.append(tunnel)
 
-    if enabled:
-        compose_text = "services:\n" + "".join(compose_service_block(user) for user in enabled)
+    if docker_users:
+        compose_text = "services:\n" + "".join(compose_service_block(user) for user in docker_users)
         volume_names = sorted(
             {
                 volume_name
-                for user in enabled
+                for user in docker_users
                 for volume_name in user["volumes"].values()
             }
         )
         compose_text += "volumes:\n" + "".join(f"  {volume_name}: {{}}\n" for volume_name in volume_names)
-        proxy_text = "".join(nginx_block(user) for user in enabled)
+        proxy_parts.append("".join(nginx_block(user) for user in docker_users))
     else:
         compose_text = "services: {}\nvolumes: {}\n"
-        proxy_text = "# Generated routes for user workspaces will be written here by the admin UI.\n"
+        if not tunnel:
+            proxy_parts.append("# Generated routes for user workspaces will be written here by the admin UI.\n")
+
+    proxy_text = "".join(proxy_parts)
 
     GENERATED_COMPOSE.write_text(compose_text, encoding="utf-8")
     GENERATED_PROXY.write_text(proxy_text, encoding="utf-8")
@@ -1168,7 +1322,9 @@ def provision(users) -> tuple[bool, str]:
 
 
 def clear_generated_proxy_files() -> None:
-    GENERATED_PROXY.write_text("# Generated routes for user workspaces will be written here by the admin UI.\n", encoding="utf-8")
+    tunnel = proxmox_tunnel_block(proxmox_settings())
+    content = tunnel or "# Generated routes for user workspaces will be written here by the admin UI.\n"
+    GENERATED_PROXY.write_text(content, encoding="utf-8")
     GENERATED_COMPOSE.write_text("services: {}\nvolumes: {}\n", encoding="utf-8")
 
 
@@ -1353,8 +1509,8 @@ def proxmox_pick_vmid(settings: dict) -> int:
     raise RuntimeError(f"No free VMID available in range {vmid_min}-{vmid_max}.")
 
 
-def proxmox_vm_access_url(settings: dict, vmid: int, node: str) -> str:
-    return settings["desktop_url_template"].format(api_url=settings["api_url"], node=node, vmid=vmid)
+def proxmox_vm_access_url(vmid: int, node: str) -> str:
+    return f"{public_scheme()}://{public_host_display()}/pve/?console=kvm&novnc=1&node={node}&vmid={vmid}"
 
 
 def proxmox_health_check() -> tuple[bool, str]:
@@ -1368,6 +1524,31 @@ def proxmox_health_check() -> tuple[bool, str]:
         return True, f"Proxmox API reachable (next VMID {next_id}, template {settings['template_vmid']} accessible)."
     except Exception as exc:
         return False, f"Proxmox API test failed: {exc}"
+
+
+def proxmox_node_usage() -> dict:
+    settings = proxmox_settings()
+    ok, _ = proxmox_ready(settings)
+    if not ok:
+        return {}
+    try:
+        raw = proxmox_request("GET", f"/nodes/{settings['node']}/status", settings)
+    except Exception:
+        return {}
+    memory = raw.get("memory", {}) if isinstance(raw, dict) else {}
+    rootfs = raw.get("rootfs", {}) if isinstance(raw, dict) else {}
+    cpu_used = float(raw.get("cpu", 0.0)) * 100.0
+    mem_total = int(memory.get("total", 0))
+    mem_used = int(memory.get("used", 0))
+    disk_total = int(rootfs.get("total", 0))
+    disk_used = int(rootfs.get("used", 0))
+    return {
+        "cpu_percent": round(cpu_used, 1),
+        "memory_used_gb": round(mem_used / (1024**3), 2),
+        "memory_total_gb": round(mem_total / (1024**3), 2),
+        "disk_used_gb": round(disk_used / (1024**3), 2),
+        "disk_total_gb": round(disk_total / (1024**3), 2),
+    }
 
 
 def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
@@ -1427,7 +1608,7 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
             "vmid": vmid,
             "node": node,
             "name": f"mwc-{user['route']}",
-            "access_url": proxmox_vm_access_url(settings, vmid, node),
+            "access_url": proxmox_vm_access_url(vmid, node),
             "guest_user": guest_user,
         }
         return True, f"Proxmox VM {vmid} created."
@@ -1479,6 +1660,28 @@ def verify_admin_auth(username: str, password: str) -> bool:
     return username == expected_user and passlib_bcrypt.verify(password, expected_hash)
 
 
+def workspace_session_key(route: str) -> str:
+    return f"workspace_auth_{route}"
+
+
+def verify_workspace_auth(user: dict, username: str, password: str) -> bool:
+    if username.strip() != str(user.get("username", "")).strip():
+        return False
+    stored_hash = str(user.get("password_hash", "")).strip()
+    if stored_hash and passlib_bcrypt.identify(stored_hash):
+        return passlib_bcrypt.verify(password, stored_hash)
+    return password == str(user.get("password", ""))
+
+
+def find_user_by_route(users, route: str):
+    return next((user for user in users if user.get("route") == route), None)
+
+
+def user_workspaces_by_name(users, username: str):
+    expected = username.strip()
+    return [user for user in users if user.get("enabled", True) and user.get("username", "").strip() == expected]
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -1499,8 +1702,8 @@ def current_flash():
     }
 
 
-def redirect_with_message(message: str, error: bool = False):
-    return redirect(url_for("index", message=message, error="1" if error else "0", lang=current_lang()))
+def redirect_with_message(message: str, error: bool = False, endpoint: str = "index"):
+    return redirect(url_for(endpoint, message=message, error="1" if error else "0", lang=current_lang()))
 
 
 def public_host_display() -> str:
@@ -1523,13 +1726,80 @@ def public_scheme() -> str:
 
 def workspace_public_url(user: dict) -> str:
     if user.get("provider") == "proxmox_vm":
-        return user.get("proxmox", {}).get("access_url", "")
+        info = user.get("proxmox", {})
+        vmid = info.get("vmid")
+        node = info.get("node")
+        if vmid and node:
+            return proxmox_vm_access_url(int(vmid), str(node))
+        return info.get("access_url", "")
     return f"{public_scheme()}://{public_host_display()}{user.get('route_path', '/')}"
 
 
 @APP.route("/")
 def root():
-    return redirect("/admin/")
+    return redirect("/user/login/")
+
+
+@APP.route("/user/login/", methods=["GET", "POST"])
+def user_login():
+    lang = current_lang()
+    tr = TRANSLATIONS[lang]
+    error = ""
+    users = load_users()
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        matches = user_workspaces_by_name(users, username)
+        if not matches:
+            error = tr["workspace_not_found"]
+        else:
+            valid = any(verify_workspace_auth(user, username, password) for user in matches)
+            if valid:
+                session["user_authenticated"] = True
+                session["workspace_username"] = username
+                for user in matches:
+                    session[workspace_session_key(user["route"])] = True
+                next_url = request.args.get("next") or url_for("user_dashboard", lang=lang)
+                return redirect(next_url)
+            error = tr["invalid_workspace_credentials"]
+    return render_template_string(USER_LOGIN_TEMPLATE, tr=tr, lang=lang, error=error)
+
+
+@APP.post("/user/logout/")
+def user_logout():
+    workspace_keys = [key for key in session.keys() if key.startswith("workspace_auth_")]
+    for key in workspace_keys:
+        session.pop(key, None)
+    session.pop("user_authenticated", None)
+    session.pop("workspace_username", None)
+    return redirect(url_for("user_login", lang=current_lang()))
+
+
+@APP.route("/user/")
+def user_dashboard():
+    lang = current_lang()
+    tr = TRANSLATIONS[lang]
+    if not session.get("user_authenticated"):
+        return redirect(url_for("user_login", lang=lang, next=request.path))
+    username = str(session.get("workspace_username", "")).strip()
+    users = user_workspaces_by_name(load_users(), username)
+    users_view = []
+    for user in users:
+        user_copy = dict(user)
+        user_copy["public_url"] = workspace_public_url(user)
+        users_view.append(user_copy)
+    return render_template_string(USER_DASHBOARD_TEMPLATE, tr=tr, lang=lang, users=users_view, session_user=username)
+
+
+@APP.route("/user/auth/<route>/")
+def user_workspace_auth(route: str):
+    users = load_users()
+    user = find_user_by_route(users, route)
+    if not user or not user.get("enabled", True):
+        return "workspace not found", 401
+    if session.get(workspace_session_key(route)):
+        return "ok", 200
+    return "unauthorized", 401
 
 
 @APP.route("/login/", methods=["GET", "POST"])
@@ -1643,13 +1913,31 @@ def index():
     )
 
 
+@APP.route("/admin/proxmox/")
+@login_required
+def proxmox_settings_page():
+    lang = current_lang()
+    tr = TRANSLATIONS[lang]
+    flash_data = current_flash()
+    cfg = proxmox_settings()
+    usage = proxmox_node_usage() if proxmox_enabled() else {}
+    return render_template_string(
+        PROXMOX_SETTINGS_TEMPLATE,
+        tr=tr,
+        lang=lang,
+        proxmox_cfg=cfg,
+        usage=usage,
+        **flash_data,
+    )
+
+
 @APP.post("/admin/proxmox/test")
 @login_required
 def proxmox_test():
     if not proxmox_enabled():
-        return redirect_with_message("Proxmox VM mode is not enabled.", error=True)
+        return redirect_with_message("Proxmox VM mode is not enabled.", error=True, endpoint="proxmox_settings_page")
     ok, message = proxmox_health_check()
-    return redirect_with_message(message, error=not ok)
+    return redirect_with_message(message, error=not ok, endpoint="proxmox_settings_page")
 
 
 @APP.post("/admin/proxmox/settings")
@@ -1671,11 +1959,22 @@ def save_proxmox_settings_route():
             vmid_min = parse_int_or_default(cfg["vmid_min"] or "1", 1, 1, 999999999, "VMID Min")
             vmid_max = parse_int_or_default(cfg["vmid_max"] or "999999999", 999999999, 1, 999999999, "VMID Max")
             if vmid_max < vmid_min:
-                return redirect_with_message("VMID Max must be greater than or equal to VMID Min.", error=True)
+                return redirect_with_message(
+                    "VMID Max must be greater than or equal to VMID Min.",
+                    error=True,
+                    endpoint="proxmox_settings_page",
+                )
         save_proxmox_settings(cfg)
+        if cfg["provisioner_mode"] == "proxmox_vm":
+            clear_generated_proxy_files()
+            reload_proxy()
     except Exception as exc:
-        return redirect_with_message(f"Saving Proxmox settings failed: {trim_output(str(exc))}", error=True)
-    return redirect_with_message("Proxmox settings saved.")
+        return redirect_with_message(
+            f"Saving Proxmox settings failed: {trim_output(str(exc))}",
+            error=True,
+            endpoint="proxmox_settings_page",
+        )
+    return redirect_with_message("Proxmox settings saved.", endpoint="proxmox_settings_page")
 
 
 @APP.post("/admin/users")

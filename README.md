@@ -94,7 +94,7 @@ ADMIN_UI_IMAGE_TAG=0.3.0 docker compose -f docker-compose.yml -f docker-compose.
 Published image path:
 
 ```text
-ghcr.io/itsh-neumeier/mobileworkspace-linux/admin-ui
+ghcr.io/itsh-neumeier/mwc
 ```
 
 For local development builds instead of GHCR:

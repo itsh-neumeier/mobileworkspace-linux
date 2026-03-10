@@ -1,6 +1,6 @@
 services:
   admin-ui:
-    image: ghcr.io/itsh-neumeier/mobileworkspace-linux/admin-ui:${ADMIN_UI_IMAGE_TAG:-latest}
+    image: ghcr.io/itsh-neumeier/mwc:${ADMIN_UI_IMAGE_TAG:-latest}
     container_name: mobileworkspace-admin-ui
     restart: unless-stopped
     ports:
@@ -12,7 +12,6 @@ services:
       MWC_USERS_FILE: /workspace/users/users.json
       MWC_GENERATED_COMPOSE: /workspace/generated/docker-compose.users.yml
       MWC_GENERATED_PROXY: /workspace/generated/nginx.users.conf
-      MWC_GENERATED_AUTH_DIR: /workspace/generated/auth
       MWC_BASE_COMPOSE: /workspace/base/docker-compose.base.yml
       MWC_DOMAIN_OR_HOST: ${DOMAIN_OR_HOST}
       MWC_TIMEZONE: ${TIMEZONE:-Europe/Berlin}

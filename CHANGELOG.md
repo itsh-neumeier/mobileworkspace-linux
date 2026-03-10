@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.11] - 2026-03-10
+
+### Added
+- New user area (`/user/login/`, `/user/`) so workspace users can sign in via WebUI and open their own workspaces
+- Dedicated Proxmox settings page (`/admin/proxmox/`) with grouped backend configuration and live node utilization cards (CPU/RAM/Disk)
+- Proxmox template script desktop profile support (`--desktop-profile xfce|none`) with XFCE/LightDM/XRDP image customization
+
+### Changed
+- GHCR image naming switched to `ghcr.io/itsh-neumeier/mwc`
+- Workspace links in admin/user UI now open in a new tab
+- Proxmox workspace URLs now target tunneled `/pve/` path through Mobile Workspace
+
+### Removed
+- nginx basic-auth workspace gate; replaced with session-based WebUI auth (`/user/auth/<route>/`)
+
 ## [0.6.9] - 2026-03-10
 
 ### Added

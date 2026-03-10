@@ -31,6 +31,7 @@ CI_USER="admin"
 CI_PASSWORD=""
 SSH_KEY_FILE=""
 IPCONFIG0="ip=dhcp"
+DESKTOP_PROFILE="xfce"  # xfce|none
 FORCE=0
 TUI_MODE="auto"  # auto|on|off
 EXPLICIT_ARGS=0
@@ -55,6 +56,7 @@ Options:
   --ci-password <password> cloud-init password (optional)
   --ssh-key-file <path>    Inject SSH public key file (optional)
   --ipconfig0 <value>      cloud-init ipconfig0 (default: ${IPCONFIG0})
+  --desktop-profile <id>   Desktop profile: xfce or none (default: ${DESKTOP_PROFILE})
   --force                  Destroy existing VMID if present
   -h, --help               Show this help
 EOF
@@ -77,6 +79,7 @@ while [ "$#" -gt 0 ]; do
     --ci-password) CI_PASSWORD="$2"; EXPLICIT_ARGS=1; shift 2 ;;
     --ssh-key-file) SSH_KEY_FILE="$2"; EXPLICIT_ARGS=1; shift 2 ;;
     --ipconfig0) IPCONFIG0="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --desktop-profile) DESKTOP_PROFILE="$2"; EXPLICIT_ARGS=1; shift 2 ;;
     --force) FORCE=1; EXPLICIT_ARGS=1; shift 1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
@@ -197,6 +200,7 @@ run_wizard() {
   CI_PASSWORD="$(ui_password "Cloud-init password")"
   SSH_KEY_FILE="$(ui_input "SSH public key file path (optional)" "$SSH_KEY_FILE")"
   IPCONFIG0="$(ui_input "Cloud-init ipconfig0" "$IPCONFIG0")"
+  DESKTOP_PROFILE="$(ui_input "Desktop profile (xfce/none)" "$DESKTOP_PROFILE")"
 
   if ui_confirm "Replace an existing VM with same VMID if present?"; then
     FORCE=1
@@ -212,6 +216,15 @@ fi
 if [ -z "${CI_STORAGE}" ]; then
   CI_STORAGE="${STORAGE}"
 fi
+
+case "${DESKTOP_PROFILE}" in
+  xfce|none)
+    ;;
+  *)
+    echo "Unsupported --desktop-profile '${DESKTOP_PROFILE}'. Allowed: xfce, none." >&2
+    exit 1
+    ;;
+esac
 
 if qm status "${VMID}" >/dev/null 2>&1; then
   if [ "${FORCE}" -eq 1 ]; then
@@ -232,12 +245,44 @@ trap cleanup EXIT INT TERM
 
 IMG_PATH="${TMP_DIR}/debian13-cloud.qcow2"
 
+ensure_virt_customize() {
+  if command -v virt-customize >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "virt-customize not found. Installing libguestfs-tools..."
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y libguestfs-tools
+  if ! command -v virt-customize >/dev/null 2>&1; then
+    echo "virt-customize is still missing after install. Aborting." >&2
+    exit 1
+  fi
+}
+
+customize_image_for_desktop() {
+  if [ "${DESKTOP_PROFILE}" = "none" ]; then
+    echo "Desktop profile disabled (none). Continuing with headless cloud image."
+    return 0
+  fi
+  ensure_virt_customize
+  echo "Customizing image with desktop profile '${DESKTOP_PROFILE}' (this can take several minutes)..."
+  virt-customize -a "${IMG_PATH}" \
+    --run-command "export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y xfce4 xfce4-goodies lightdm xorg dbus-x11 xrdp xorgxrdp; apt-get clean" \
+    --run-command "mkdir -p /etc/systemd/system/graphical.target.wants /etc/systemd/system/multi-user.target.wants /etc/skel" \
+    --run-command "ln -sf /lib/systemd/system/graphical.target /etc/systemd/system/default.target" \
+    --run-command "ln -sf /lib/systemd/system/lightdm.service /etc/systemd/system/graphical.target.wants/lightdm.service" \
+    --run-command "ln -sf /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service" \
+    --run-command "ln -sf /lib/systemd/system/xrdp.service /etc/systemd/system/multi-user.target.wants/xrdp.service" \
+    --run-command "echo xfce4-session > /etc/skel/.xsession"
+}
+
 echo "Downloading Debian 13 cloud image..."
 if [ "${FETCH_CMD}" = "wget" ]; then
   wget -O "${IMG_PATH}" "${IMAGE_URL}"
 else
   curl -fL -o "${IMG_PATH}" "${IMAGE_URL}"
 fi
+
+customize_image_for_desktop
 
 echo "Creating VM ${VMID} (${NAME})..."
 qm create "${VMID}" \
@@ -288,4 +333,5 @@ echo "Done."
 echo "Template created:"
 echo "  VMID: ${VMID}"
 echo "  Name: ${NAME}"
+echo "  Desktop profile: ${DESKTOP_PROFILE}"
 echo "Use this VMID in MobileWorkspace Admin UI -> Proxmox Backend Settings -> Template VMID."
