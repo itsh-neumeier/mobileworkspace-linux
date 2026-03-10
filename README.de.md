@@ -187,6 +187,12 @@ Im Proxmox-VM-Modus bietet die Admin-WebUI zusätzlich:
 - VM-Overrides pro Benutzer (vCPU, RAM, Bridge, Disk, Auto-Start)
 - einen integrierten `Proxmox API testen`-Button für einen End-to-End-API-Check
 
+Wenn du eine fertige Debian-13-Cloud-Init-Template-VM in Proxmox brauchst, nutze:
+
+```bash
+sh scripts/proxmox-create-debian13-template.sh --vmid 9000 --name debian13-cloud-template
+```
+
 ## Optionaler Externer Proxy
 
 Wenn du den Dienst extern veröffentlichen willst, kannst du zusätzlich einen Reverse Proxy wie Zoraxy vor diesen Stack setzen.

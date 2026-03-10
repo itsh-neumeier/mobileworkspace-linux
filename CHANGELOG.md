@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.6] - 2026-03-10
+
+### Added
+- New Proxmox host script `scripts/proxmox-create-debian13-template.sh` to create a Debian 13 cloud-init template VM automatically
+
 ## [0.6.5] - 2026-03-10
 
 ### Fixed
