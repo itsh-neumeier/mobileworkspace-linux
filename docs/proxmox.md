@@ -39,8 +39,14 @@ Increase RAM if several desktop users will be active at the same time.
 4. Install Docker Engine and Docker Compose plugin.
 5. Clone this repository into the VM.
 6. Copy `.env.example` to `.env` and configure the admin credentials.
-7. Start the stack with `docker compose up -d --build`.
+7. Start the stack with `docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d`.
 8. Open `/admin/` and create user workspaces from the web UI.
+
+If you want to pin a specific published image version:
+
+```bash
+ADMIN_UI_IMAGE_TAG=0.3.0 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+```
 
 ## Networking in Proxmox
 

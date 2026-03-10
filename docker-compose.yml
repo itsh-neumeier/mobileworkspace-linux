@@ -19,8 +19,7 @@ services:
       - edge
 
   admin-ui:
-    build:
-      context: ./admin-ui
+    image: ghcr.io/itsh-neumeier/mobileworkspace-linux/admin-ui:${ADMIN_UI_IMAGE_TAG:-latest}
     container_name: mobileworkspace-admin-ui
     restart: unless-stopped
     environment:

@@ -68,7 +68,7 @@ docker run --rm caddy:2.8-alpine caddy hash-password --plaintext "ersetzen"
 4. Stack starten:
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
 ```
 
 5. Admin-WebUI öffnen:
@@ -76,6 +76,36 @@ docker compose up -d --build
 - `http://DEIN_HOST/admin/`
 
 6. Benutzer und Workspaces in der WebUI anlegen.
+
+## Compose-Dateien
+
+- `docker-compose.yml`: Basis-Compose-Datei
+- `docker-compose.ghcr.yml`: explizite GHCR-Variante für die Admin-WebUI
+- `docker-compose.build.yml`: Build-Override für lokale Entwicklung
+
+Für Proxmox oder andere Server-Deployments ist die GHCR-Variante in der Regel die bessere Wahl:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+```
+
+Um eine feste Version zu pinnen:
+
+```bash
+ADMIN_UI_IMAGE_TAG=0.3.0 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+```
+
+Veröffentlichter Image-Pfad:
+
+```text
+ghcr.io/itsh-neumeier/mobileworkspace-linux/admin-ui
+```
+
+Für lokale Entwicklungs-Builds statt GHCR:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
 
 Die Admin-WebUI erzeugt anschließend Routen wie:
 
@@ -137,6 +167,7 @@ Die Admin-WebUI ordnet jeden Workspace beim Anlegen einem dieser Profile zu.
 - `CHANGELOG.md` wird bei jedem Release gepflegt
 - Git-Tags nach Semantic Versioning verwenden, zum Beispiel `v0.2.0`
 - GitHub Actions erstellt für gepushte Versionstags ein Release-Artefakt
+- GitHub Actions veröffentlicht zusätzlich das Admin-UI-Image nach GHCR
 
 Beispiel für einen Release-Ablauf:
 

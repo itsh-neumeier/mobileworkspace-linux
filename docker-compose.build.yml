@@ -1,0 +1,4 @@
+services:
+  admin-ui:
+    build:
+      context: ./admin-ui

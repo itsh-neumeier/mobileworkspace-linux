@@ -68,7 +68,7 @@ docker run --rm caddy:2.8-alpine caddy hash-password --plaintext "replace-me"
 4. Start the stack:
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
 ```
 
 5. Open the admin panel:
@@ -76,6 +76,36 @@ docker compose up -d --build
 - `http://YOUR_HOST/admin/`
 
 6. Create users from the web UI.
+
+## Compose Files
+
+- `docker-compose.yml`: local build of the admin UI
+- `docker-compose.ghcr.yml`: explicit GHCR deployment variant
+- `docker-compose.build.yml`: local build override for development
+
+For Proxmox or other server deployments, the GHCR variant is usually the better fit:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+```
+
+To pin a specific version:
+
+```bash
+ADMIN_UI_IMAGE_TAG=0.3.0 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d
+```
+
+Published image path:
+
+```text
+ghcr.io/itsh-neumeier/mobileworkspace-linux/admin-ui
+```
+
+For local development builds instead of GHCR:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
 
 The admin panel will then create routes such as:
 
@@ -137,6 +167,7 @@ The admin UI assigns each workspace to one of these network profiles during crea
 - Update `CHANGELOG.md` for every release
 - Use Semantic Versioning tags such as `v0.2.0`
 - GitHub Actions creates a release artifact for pushed version tags
+- GitHub Actions also publishes the admin UI image to GHCR
 
 Example release flow:
 
