@@ -286,15 +286,18 @@ customize_image_for_desktop() {
   echo "Customizing image with desktop profile '${DESKTOP_PROFILE}' (this can take several minutes)..."
   virt-customize -a "${IMG_PATH}" \
     --run-command "printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d; chmod +x /usr/sbin/policy-rc.d" \
-    --run-command "export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y --no-install-recommends xfce4 xfce4-goodies lightdm xorg dbus-x11 xrdp xorgxrdp xserver-xorg-video-qxl; apt-get clean; rm -rf /var/lib/apt/lists/*" \
+    --run-command "export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y --no-install-recommends xfce4 xfce4-goodies lightdm lightdm-gtk-greeter xorg dbus-x11 xrdp xorgxrdp xserver-xorg-video-qxl; apt-get clean; rm -rf /var/lib/apt/lists/*" \
     --run-command "rm -f /usr/sbin/policy-rc.d" \
     --run-command "mkdir -p /etc/systemd/system/graphical.target.wants /etc/systemd/system/multi-user.target.wants /etc/skel" \
     --run-command "ln -sf /lib/systemd/system/graphical.target /etc/systemd/system/default.target" \
     --run-command "ln -sf /lib/systemd/system/lightdm.service /etc/systemd/system/graphical.target.wants/lightdm.service" \
     --run-command "ln -sf /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service" \
     --run-command "printf '/usr/sbin/lightdm\n' > /etc/X11/default-display-manager" \
-    --run-command "mkdir -p /etc/lightdm/lightdm.conf.d; printf '[Seat:*]\nuser-session=xfce\n' > /etc/lightdm/lightdm.conf.d/50-mwc-xfce.conf" \
+    --run-command "mkdir -p /etc/lightdm/lightdm.conf.d; printf '[Seat:*]\nuser-session=xfce\ngreeter-session=lightdm-gtk-greeter\n' > /etc/lightdm/lightdm.conf.d/50-mwc-xfce.conf" \
     --run-command "ln -sf /dev/null /etc/systemd/system/getty@tty1.service" \
+    --run-command "printf '#!/bin/sh\nset -eu\nsystemctl set-default graphical.target || true\nsystemctl enable lightdm.service || true\nsystemctl restart lightdm.service || true\nsystemctl disable mwc-firstboot-desktop.service || true\n' > /usr/local/sbin/mwc-firstboot-desktop.sh; chmod +x /usr/local/sbin/mwc-firstboot-desktop.sh" \
+    --run-command "printf '[Unit]\nDescription=Ensure desktop stack starts on first boot\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/sbin/mwc-firstboot-desktop.sh\nRemainAfterExit=no\n\n[Install]\nWantedBy=multi-user.target\n' > /etc/systemd/system/mwc-firstboot-desktop.service" \
+    --run-command "ln -sf /etc/systemd/system/mwc-firstboot-desktop.service /etc/systemd/system/multi-user.target.wants/mwc-firstboot-desktop.service" \
     --run-command "ln -sf /lib/systemd/system/xrdp.service /etc/systemd/system/multi-user.target.wants/xrdp.service" \
     --run-command "echo xfce4-session > /etc/skel/.xsession"
 }

@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.30] - 2026-03-11
+
+### Fixed
+- Desktop template provisioning now installs `lightdm-gtk-greeter` explicitly to prevent `tty1` fallback without GUI greeter
+- Added first-boot desktop recovery unit (`mwc-firstboot-desktop.service`) that enforces:
+  - `graphical.target`
+  - `lightdm` enable/restart
+
+### Changed
+- LightDM seat config now pins both XFCE session and GTK greeter for more reliable noVNC desktop startup
+
 ## [0.6.29] - 2026-03-11
 
 ### Changed
