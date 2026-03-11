@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.33] - 2026-03-11
+
+### Fixed
+- noVNC launch now performs server-side Proxmox ticket handshake before opening viewer:
+  - new route `GET /pve/launch/<route>/`
+  - requests `vncproxy` ticket/port via Proxmox API
+  - redirects to proxied `/novnc/vnc.html` with valid `vncticket`
+- Proxmox workspace links now use the launch route to avoid `Error 401: No ticket`
+
 ## [0.6.32] - 2026-03-11
 
 ### Added

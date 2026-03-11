@@ -1953,7 +1953,7 @@ def reconcile_workspace_state(users: list[dict]) -> tuple[list[dict], str]:
                         user["workspace_health"] = desired_health
                         changed = True
                     if exists:
-                        access_url = proxmox_vm_access_url(vmid, node)
+                        access_url = proxmox_workspace_access_url(str(user.get("route", "")))
                         if info.get("access_url") != access_url:
                             info["access_url"] = access_url
                             changed = True
@@ -2482,6 +2482,10 @@ def proxmox_vm_access_url(vmid: int, node: str) -> str:
     return f"{public_scheme()}://{public_host_display()}/pve/?console=kvm&novnc=1&node={node}&vmid={vmid}"
 
 
+def proxmox_workspace_access_url(route: str) -> str:
+    return f"{public_scheme()}://{public_host_display()}/pve/launch/{route}/"
+
+
 def proxmox_health_check() -> tuple[bool, str]:
     settings = proxmox_settings()
     ok, message = proxmox_ready(settings)
@@ -2705,7 +2709,7 @@ def proxmox_create_vm_for_user(user: dict, progress_hook=None) -> tuple[bool, st
             "vmid": vmid,
             "node": node,
             "name": vm_name,
-            "access_url": proxmox_vm_access_url(vmid, node),
+            "access_url": proxmox_workspace_access_url(str(user.get("route", ""))),
             "guest_user": guest_user,
         }
         return True, f"Proxmox VM {vmid} created."
@@ -3033,10 +3037,9 @@ def public_scheme() -> str:
 def workspace_public_url(user: dict) -> str:
     if user.get("provider") == "proxmox_vm":
         info = user.get("proxmox", {})
-        vmid = info.get("vmid")
-        node = info.get("node")
-        if vmid and node:
-            return proxmox_vm_access_url(int(vmid), str(node))
+        route = str(user.get("route", "")).strip()
+        if route:
+            return proxmox_workspace_access_url(route)
         return info.get("access_url", "")
     return f"{public_scheme()}://{public_host_display()}{user.get('route_path', '/')}"
 
@@ -3148,6 +3151,52 @@ def user_workspace_auth(route: str):
     if session.get(workspace_session_key(route)):
         return "ok", 200
     return "unauthorized", 401
+
+
+@APP.get("/pve/launch/<route>/")
+def proxmox_launch(route: str):
+    lang = current_lang()
+    users = load_users()
+    user = find_user_by_route(users, route)
+    if not user or user.get("provider") != "proxmox_vm" or not user.get("enabled", True):
+        return redirect_with_message("Workspace was not found or is disabled.", error=True, endpoint="workspaces_page")
+    if not session.get("admin_authenticated") and not session.get(workspace_session_key(route)):
+        return redirect(url_for("user_login", lang=lang, next=request.path))
+
+    settings = proxmox_settings()
+    api_ok, api_message = proxmox_api_config_ready(settings)
+    if not api_ok:
+        return redirect_with_message(api_message, error=True, endpoint="workspaces_page")
+
+    info = user.get("proxmox", {})
+    vmid = info.get("vmid")
+    node = str(info.get("node") or settings.get("node", "")).strip()
+    if not vmid or not node:
+        return redirect_with_message("Proxmox VM metadata missing.", error=True, endpoint="workspaces_page")
+
+    try:
+        proxy = proxmox_request(
+            "POST",
+            f"/nodes/{node}/qemu/{int(vmid)}/vncproxy",
+            settings,
+            {"websocket": 1},
+        )
+        ticket = str(proxy.get("ticket", "")).strip()
+        port = str(proxy.get("port", "")).strip()
+        if not ticket or not port:
+            raise RuntimeError("No ticket/port received from Proxmox vncproxy.")
+        websocket_path = f"api2/json/nodes/{node}/qemu/{int(vmid)}/vncwebsocket?port={port}&vncticket={ticket}"
+        novnc_url = "/novnc/vnc.html?" + urlencode(
+            {
+                "autoconnect": "1",
+                "resize": "remote",
+                "path": websocket_path,
+                "show_dot": "1",
+            }
+        )
+        return redirect(novnc_url)
+    except Exception as exc:
+        return redirect_with_message(f"noVNC launch failed: {trim_output(str(exc))}", error=True, endpoint="workspaces_page")
 
 
 @APP.route("/login/", methods=["GET", "POST"])
