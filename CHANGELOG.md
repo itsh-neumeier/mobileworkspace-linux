@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.27] - 2026-03-11
+
+### Changed
+- Empty workspace state now includes a direct CTA link/button to `Create Workspace`
+- Language selector on login/change-password/user-login views is now displayed as flag-only dropdown (no text label)
+
 ## [0.6.26] - 2026-03-11
 
 ### Added

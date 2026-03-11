@@ -125,6 +125,7 @@ TRANSLATIONS = {
         "delete": "Delete",
         "no_workspaces": "No workspaces yet",
         "no_workspaces_help": "Create the first user to generate route, storage path, and Docker container automatically.",
+        "create_workspace_now": "Create workspace now",
         "change_initial_password": "Change Initial Password",
         "change_initial_password_help": "For security reasons, you must set a new admin password before using the dashboard.",
         "current_password": "Current password",
@@ -244,6 +245,7 @@ TRANSLATIONS = {
         "delete": "Löschen",
         "no_workspaces": "Noch keine Workspaces",
         "no_workspaces_help": "Erstelle den ersten Benutzer, um Route, Speicher und Container automatisch zu erzeugen.",
+        "create_workspace_now": "Workspace jetzt erstellen",
         "change_initial_password": "Initiales Passwort ändern",
         "change_initial_password_help": "Aus Sicherheitsgründen musst du zuerst ein neues Admin-Passwort setzen.",
         "current_password": "Aktuelles Passwort",
@@ -741,7 +743,10 @@ PAGE_TEMPLATE = """
             <div class="empty-state p-5 text-center">
               <div class="display-6 mb-3"><i class="bi bi-inboxes-fill"></i></div>
               <h3 class="h5">{{ tr.no_workspaces }}</h3>
-              <p class="text-body-secondary mb-0">{{ tr.no_workspaces_help }}</p>
+              <p class="text-body-secondary mb-2">{{ tr.no_workspaces_help }}</p>
+              <a class="btn btn-primary btn-sm rounded-pill" href="{{ url_for('workspaces_page', lang=lang, view='create') }}">
+                <i class="bi bi-plus-circle me-2"></i>{{ tr.create_workspace_now }}
+              </a>
             </div>
             {% endif %}
           </section>
@@ -877,9 +882,8 @@ LOGIN_TEMPLATE = """
       </div>
     </div>
     <p class="text-body-secondary mb-4">{{ tr.login_help }}</p>
-    <div class="mb-3">
-      <label class="form-label fw-semibold">{{ tr.language }}</label>
-      <select class="form-select rounded-4" id="langSelect">
+    <div class="d-flex justify-content-end mb-3">
+      <select class="form-select form-select-sm rounded-pill" id="langSelect" style="width:auto">
         <option value="en" {{ 'selected' if lang == 'en' else '' }}>&#127468;&#127463;</option>
         <option value="de" {{ 'selected' if lang == 'de' else '' }}>&#127465;&#127466;</option>
       </select>
@@ -947,9 +951,8 @@ CHANGE_PASSWORD_TEMPLATE = """
   <div class="card panel p-4 p-lg-5">
     <h1 class="h3 mb-2">{{ tr.change_initial_password }}</h1>
     <p class="text-body-secondary mb-4">{{ tr.change_initial_password_help }}</p>
-    <div class="mb-3">
-      <label class="form-label fw-semibold">{{ tr.language }}</label>
-      <select class="form-select rounded-4" id="langSelect">
+    <div class="d-flex justify-content-end mb-3">
+      <select class="form-select form-select-sm rounded-pill" id="langSelect" style="width:auto">
         <option value="en" {{ 'selected' if lang == 'en' else '' }}>&#127468;&#127463;</option>
         <option value="de" {{ 'selected' if lang == 'de' else '' }}>&#127465;&#127466;</option>
       </select>
@@ -1019,6 +1022,12 @@ USER_LOGIN_TEMPLATE = """
   <div class="card panel p-4 p-lg-5">
     <h1 class="h3 mb-2">{{ tr.workspace_login }}</h1>
     <p class="text-body-secondary mb-4">{{ tr.workspace_login_help }}</p>
+    <div class="d-flex justify-content-end mb-3">
+      <select class="form-select form-select-sm rounded-pill" id="langSelect" style="width:auto">
+        <option value="en" {{ 'selected' if lang == 'en' else '' }}>&#127468;&#127463;</option>
+        <option value="de" {{ 'selected' if lang == 'de' else '' }}>&#127465;&#127466;</option>
+      </select>
+    </div>
     {% if error %}
     <div class="alert alert-danger rounded-4" role="alert">{{ error }}</div>
     {% endif %}
@@ -1034,6 +1043,13 @@ USER_LOGIN_TEMPLATE = """
       <button class="btn btn-primary btn-lg w-100 rounded-pill" type="submit">{{ tr.sign_in }}</button>
     </form>
   </div>
+  <script>
+    document.getElementById("langSelect").addEventListener("change", (e) => {
+      const url = new URL(window.location.href);
+      url.searchParams.set("lang", e.target.value);
+      window.location.href = url.toString();
+    });
+  </script>
 </body>
 </html>
 """
