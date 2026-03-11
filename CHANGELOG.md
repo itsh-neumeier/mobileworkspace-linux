@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.34] - 2026-03-11
+
+### Fixed
+- noVNC launch endpoint path changed from `/pve/launch/<route>/` to `/pve-launch/<route>/` to avoid collision with nginx Proxmox tunnel routes
+- Added explicit nginx pass-through for `/pve-launch/` to Flask app
+
 ## [0.6.33] - 2026-03-11
 
 ### Fixed

@@ -2483,7 +2483,7 @@ def proxmox_vm_access_url(vmid: int, node: str) -> str:
 
 
 def proxmox_workspace_access_url(route: str) -> str:
-    return f"{public_scheme()}://{public_host_display()}/pve/launch/{route}/"
+    return f"{public_scheme()}://{public_host_display()}/pve-launch/{route}/"
 
 
 def proxmox_health_check() -> tuple[bool, str]:
@@ -3153,7 +3153,7 @@ def user_workspace_auth(route: str):
     return "unauthorized", 401
 
 
-@APP.get("/pve/launch/<route>/")
+@APP.get("/pve-launch/<route>/")
 def proxmox_launch(route: str):
     lang = current_lang()
     users = load_users()
