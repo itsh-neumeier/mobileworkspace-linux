@@ -2,6 +2,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import ssl
 import subprocess
 import threading
@@ -1134,39 +1135,41 @@ PROXMOX_SETTINGS_TEMPLATE = """
           <a class="btn btn-sm btn-outline-primary" href="{{ url_for('proxmox_template_job_progress_page', job_id=active_template_job, lang=lang) }}">{{ tr.template_progress }}</a>
         </div>
         {% endif %}
-        <form method="post" action="{{ url_for('proxmox_template_create') }}" class="mb-4">
+        <form method="post" action="{{ url_for('proxmox_template_create') }}" class="mb-4" id="templateCreateForm">
           <div class="row g-3">
             <div class="col-12 col-md-4">
               <label class="form-label fw-semibold" for="tmpl_vmid">{{ tr.proxmox_template_vmid }}</label>
-              <input class="form-control" id="tmpl_vmid" name="tmpl_vmid" value="{{ proxmox_cfg.template_vmid or '9000' }}" required>
+              <input class="form-control" id="tmpl_vmid" name="tmpl_vmid" value="{{ proxmox_cfg.template_vmid or '9000' }}" placeholder="9000" required>
             </div>
             <div class="col-12 col-md-8">
               <label class="form-label fw-semibold" for="tmpl_name">{{ tr.template_name }}</label>
-              <input class="form-control" id="tmpl_name" name="tmpl_name" value="debian13-cloud-template" required>
+              <input class="form-control" id="tmpl_name" name="tmpl_name" value="debian13-cloud-template" placeholder="debian13-cloud-template" required>
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label fw-semibold" for="tmpl_storage">{{ tr.template_storage }}</label>
-              <input list="storage-options" class="form-control" id="tmpl_storage" name="tmpl_storage" placeholder="local-lvm" required>
+              <input list="storage-options" class="form-control" id="tmpl_storage" name="tmpl_storage" placeholder="e.g. local-lvm" required>
+              <div class="form-text">{{ tr.storage_detected }}: {{ storage_options|join(', ') if storage_options else '-' }}</div>
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label fw-semibold" for="tmpl_ci_storage">{{ tr.template_ci_storage }}</label>
-              <input list="storage-options" class="form-control" id="tmpl_ci_storage" name="tmpl_ci_storage" placeholder="local-lvm" required>
+              <input list="storage-options" class="form-control" id="tmpl_ci_storage" name="tmpl_ci_storage" placeholder="e.g. local-lvm" required>
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label fw-semibold" for="tmpl_bridge">{{ tr.template_bridge }}</label>
-              <input list="bridge-options" class="form-control" id="tmpl_bridge" name="tmpl_bridge" value="{{ proxmox_cfg.net_bridge or 'vmbr0' }}" required>
+              <input list="bridge-options" class="form-control" id="tmpl_bridge" name="tmpl_bridge" value="{{ proxmox_cfg.net_bridge or 'vmbr0' }}" placeholder="e.g. vmbr0" required>
+              <div class="form-text">Detected: {{ bridge_options|join(', ') if bridge_options else '-' }}</div>
             </div>
             <div class="col-6 col-md-3">
               <label class="form-label fw-semibold" for="tmpl_cores">{{ tr.vm_cores }}</label>
-              <input class="form-control" id="tmpl_cores" name="tmpl_cores" type="number" min="1" max="32" value="2" required>
+              <input class="form-control" id="tmpl_cores" name="tmpl_cores" type="number" min="1" max="32" value="2" placeholder="2" required>
             </div>
             <div class="col-6 col-md-3">
               <label class="form-label fw-semibold" for="tmpl_memory">{{ tr.vm_memory_mb }}</label>
-              <input class="form-control" id="tmpl_memory" name="tmpl_memory" type="number" min="1024" max="262144" value="4096" required>
+              <input class="form-control" id="tmpl_memory" name="tmpl_memory" type="number" min="1024" max="262144" value="4096" placeholder="4096" required>
             </div>
             <div class="col-6 col-md-3">
               <label class="form-label fw-semibold" for="tmpl_disk_gb">{{ tr.template_disk_gb }}</label>
-              <input class="form-control" id="tmpl_disk_gb" name="tmpl_disk_gb" type="number" min="8" max="4096" value="32" required>
+              <input class="form-control" id="tmpl_disk_gb" name="tmpl_disk_gb" type="number" min="8" max="4096" value="32" placeholder="32" required>
             </div>
             <div class="col-6 col-md-3">
               <label class="form-label fw-semibold" for="tmpl_desktop_profile">{{ tr.template_desktop_profile }}</label>
@@ -1175,6 +1178,8 @@ PROXMOX_SETTINGS_TEMPLATE = """
                 <option value="none">none</option>
               </select>
             </div>
+            <input type="hidden" id="tmpl_ssh_user" name="tmpl_ssh_user" value="">
+            <input type="hidden" id="tmpl_ssh_password" name="tmpl_ssh_password" value="">
             <div class="col-12">
               <div class="form-check">
                 <input class="form-check-input" type="checkbox" id="tmpl_force" name="tmpl_force" value="1">
@@ -1210,6 +1215,37 @@ PROXMOX_SETTINGS_TEMPLATE = """
       </div>
     </div>
   </div>
+  <script>
+    (() => {
+      const form = document.getElementById("templateCreateForm");
+      if (!form) return;
+      form.addEventListener("submit", (ev) => {
+        const keyEl = document.getElementById("cfg_ssh_private_key");
+        const defaultUserEl = document.getElementById("cfg_ssh_user");
+        const userHidden = document.getElementById("tmpl_ssh_user");
+        const passHidden = document.getElementById("tmpl_ssh_password");
+        if (!userHidden || !passHidden) return;
+        userHidden.value = "";
+        passHidden.value = "";
+        const keyValue = (keyEl?.value || "").trim();
+        if (keyValue.length > 0) return;
+        const fallbackUser = (defaultUserEl?.value || "root").trim() || "root";
+        const promptUser = window.prompt("SSH user for Proxmox host", fallbackUser);
+        if (!promptUser) {
+          ev.preventDefault();
+          return;
+        }
+        const promptPass = window.prompt("SSH password for " + promptUser, "");
+        if (promptPass === null || promptPass === "") {
+          ev.preventDefault();
+          alert("SSH password is required when no private key is configured.");
+          return;
+        }
+        userHidden.value = promptUser.trim();
+        passHidden.value = promptPass;
+      });
+    })();
+  </script>
 </body>
 </html>
 """
@@ -2503,22 +2539,31 @@ def run_template_build_job(job_id: str, values: dict, settings: dict) -> None:
     try:
         ssh_host = str(settings.get("ssh_host", "")).strip()
         ssh_port = int(settings.get("ssh_port", 22))
-        ssh_user = str(settings.get("ssh_user", "root")).strip() or "root"
+        ssh_user = str(values.get("ssh_user_override") or settings.get("ssh_user", "root")).strip() or "root"
         ssh_key = str(settings.get("ssh_private_key", "")).strip()
+        ssh_password = str(values.get("ssh_password_runtime", "")).strip()
         if not ssh_host:
             raise RuntimeError("Missing Proxmox SSH host in settings.")
+        if not ssh_key and not ssh_password:
+            raise RuntimeError("No SSH auth available. Configure SSH key or provide SSH password in popup.")
 
         script_parts = build_template_script_command(values)
         remote_cmd = " ".join(script_parts)
 
         template_job_update(job_id, state="running", progress=10, message="Preparing SSH execution...", logs=logs)
         key_file = None
-        ssh_cmd = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-p", str(ssh_port)]
+        ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=accept-new", "-p", str(ssh_port)]
         if ssh_key:
             key_file = JOBS_DIR / f"{job_id}.key"
             key_file.write_text(ssh_key + "\n", encoding="utf-8")
             os.chmod(key_file, 0o600)
+            ssh_cmd.extend(["-o", "BatchMode=yes"])
             ssh_cmd.extend(["-i", str(key_file)])
+        elif ssh_password:
+            sshpass_bin = shutil.which("sshpass")
+            if not sshpass_bin:
+                raise RuntimeError("sshpass is not installed in admin-ui image. Rebuild with latest image tag.")
+            ssh_cmd = [sshpass_bin, "-p", ssh_password] + ssh_cmd
         ssh_cmd.append(f"{ssh_user}@{ssh_host}")
         ssh_cmd.append(remote_cmd)
 
@@ -3054,6 +3099,8 @@ def proxmox_template_create():
         disk_gb = parse_int_or_default(request.form.get("tmpl_disk_gb", ""), 32, 8, 4096, "Disk size")
         desktop_profile = request.form.get("tmpl_desktop_profile", "xfce").strip().lower()
         force_replace = request.form.get("tmpl_force") == "1"
+        ssh_user_override = request.form.get("tmpl_ssh_user", "").strip()
+        ssh_password_runtime = request.form.get("tmpl_ssh_password", "")
     except ValueError as exc:
         return redirect_with_message(str(exc), error=True, endpoint="proxmox_settings_page")
 
@@ -3076,6 +3123,8 @@ def proxmox_template_create():
         "disk_gb": disk_gb,
         "desktop_profile": desktop_profile,
         "force_replace": force_replace,
+        "ssh_user_override": ssh_user_override,
+        "ssh_password_runtime": ssh_password_runtime,
     }
 
     job_id = f"template-{uuid.uuid4().hex[:10]}"

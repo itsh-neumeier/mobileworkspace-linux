@@ -1,6 +1,6 @@
 FROM docker:28-cli
 
-RUN apk add --no-cache nginx python3 py3-pip
+RUN apk add --no-cache nginx python3 py3-pip openssh-client sshpass
 
 WORKDIR /app
 

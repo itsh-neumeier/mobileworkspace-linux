@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.23] - 2026-03-11
+
+### Added
+- Proxmox template creation form now prompts for SSH user/password when no SSH private key is configured
+- Password-based SSH execution support for template build jobs (`sshpass`) in `admin-ui` image
+
+### Changed
+- Improved template form placeholders and helper text so sample values are easier to recognize
+
 ## [0.6.22] - 2026-03-11
 
 ### Added
