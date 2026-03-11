@@ -172,6 +172,11 @@ TRANSLATIONS = {
         "health_corrupt": "corrupt",
         "vm_stats": "VM Stats",
         "proxmox_tasks": "Recent Proxmox Tasks",
+        "task_type": "Type",
+        "task_status": "Status",
+        "task_start": "Start",
+        "task_end": "End",
+        "task_id": "Task",
         "user_overview": "User Overview",
         "workspace_count": "Workspace Count",
         "reset_user_password": "Reset User Password",
@@ -292,6 +297,11 @@ TRANSLATIONS = {
         "health_corrupt": "fehlerhaft",
         "vm_stats": "VM Statistik",
         "proxmox_tasks": "Letzte Proxmox Tasks",
+        "task_type": "Typ",
+        "task_status": "Status",
+        "task_start": "Start",
+        "task_end": "Ende",
+        "task_id": "Task",
         "user_overview": "Benutzerübersicht",
         "workspace_count": "Workspace Anzahl",
         "reset_user_password": "Benutzerpasswort zurücksetzen",
@@ -679,10 +689,29 @@ PAGE_TEMPLATE = """
                       {% endif %}
                       {% if user.proxmox_tasks %}
                       <div class="mt-2 mb-3 small text-body-secondary">{{ tr.proxmox_tasks }}</div>
-                      <div class="d-flex flex-wrap gap-2 mb-3">
-                        {% for task in user.proxmox_tasks %}
-                        <span class="soft-badge">{{ task.type }}: {{ task.status }}</span>
-                        {% endfor %}
+                      <div class="table-responsive mb-3">
+                        <table class="table table-sm align-middle mb-0">
+                          <thead>
+                            <tr>
+                              <th>{{ tr.task_type }}</th>
+                              <th>{{ tr.task_status }}</th>
+                              <th>{{ tr.task_start }}</th>
+                              <th>{{ tr.task_end }}</th>
+                              <th>{{ tr.task_id }}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for task in user.proxmox_tasks %}
+                            <tr>
+                              <td>{{ task.type }}</td>
+                              <td>{{ task.status }}</td>
+                              <td>{{ task.start }}</td>
+                              <td>{{ task.end }}</td>
+                              <td class="small text-body-secondary">{{ task.upid }}</td>
+                            </tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
                       </div>
                       {% endif %}
                       <a class="url-pill px-3 py-2 d-inline-flex align-items-center text-decoration-none" href="{{ user.proxmox.access_url }}" target="_blank" rel="noopener noreferrer">
@@ -2440,6 +2469,16 @@ def proxmox_vm_stats(settings: dict, node: str, vmid: int) -> dict:
     }
 
 
+def proxmox_timestamp_text(value) -> str:
+    try:
+        ts = int(value)
+    except Exception:
+        return "-"
+    if ts <= 0:
+        return "-"
+    return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+
 def proxmox_vm_recent_tasks(settings: dict, node: str, vmid: int, limit: int = 5) -> list[dict]:
     try:
         raw = proxmox_request("GET", f"/nodes/{node}/tasks", settings, {"limit": limit, "vmid": vmid})
@@ -2454,6 +2493,9 @@ def proxmox_vm_recent_tasks(settings: dict, node: str, vmid: int, limit: int = 5
                 {
                     "type": str(task.get("type", "task")),
                     "status": str(task.get("status", "unknown")),
+                    "start": proxmox_timestamp_text(task.get("starttime")),
+                    "end": proxmox_timestamp_text(task.get("endtime")),
+                    "upid": str(task.get("upid", "-")),
                 }
             )
     return items

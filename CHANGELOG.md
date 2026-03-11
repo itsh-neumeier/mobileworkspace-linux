@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.31] - 2026-03-11
+
+### Changed
+- Workspace overview now renders recent Proxmox tasks as a compact table (last 5) instead of badge list
+- Task rows now include: type, status, start, end, and UPID
+
 ## [0.6.30] - 2026-03-11
 
 ### Fixed
