@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 
 COPY app.py .
 COPY start.sh /usr/local/bin/start.sh
+COPY static ./static
 
 RUN chmod +x /usr/local/bin/start.sh
 

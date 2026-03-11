@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.35] - 2026-03-11
+
+### Fixed
+- noVNC launcher now redirects to Proxmox native console entry (`/pve/?console=kvm&novnc=1...`) with ticket parameters instead of missing `vnc.html` path
+
+### Changed
+- Admin workspace page header and footer made more compact with tighter spacing
+- Admin dashboard cards now use consistent visual sizing and equal-height layout
+
+### Added
+- App favicon support (`/favicon.ico` route + bundled `static/favicon.svg`)
+
 ## [0.6.34] - 2026-03-11
 
 ### Fixed

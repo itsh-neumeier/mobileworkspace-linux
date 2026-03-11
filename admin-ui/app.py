@@ -15,7 +15,7 @@ from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from flask import Flask, redirect, render_template_string, request, session, url_for
+from flask import Flask, redirect, render_template_string, request, send_from_directory, session, url_for
 from passlib.hash import bcrypt as passlib_bcrypt
 
 
@@ -350,6 +350,7 @@ PAGE_TEMPLATE = """
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mobile Web Console Hub Admin</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
@@ -385,6 +386,13 @@ PAGE_TEMPLATE = """
     }
     .app-shell {
       min-height: 100vh;
+    }
+    .compact-header {
+      border: 1px solid var(--mwc-border);
+      border-radius: 1rem;
+      padding: 0.75rem 1rem;
+      background: color-mix(in srgb, var(--mwc-surface-strong) 86%, transparent);
+      backdrop-filter: blur(10px);
     }
     .glass-panel {
       background: var(--mwc-surface);
@@ -450,6 +458,7 @@ PAGE_TEMPLATE = """
       background: var(--mwc-surface-strong);
       border: 1px solid var(--mwc-border);
       transition: transform 0.18s ease, box-shadow 0.18s ease;
+      min-height: 11rem;
     }
     .workspace-card:hover {
       transform: translateY(-2px);
@@ -484,16 +493,20 @@ PAGE_TEMPLATE = """
     .footer-shell {
       border-top: 1px solid var(--mwc-border);
       color: var(--bs-secondary-color);
+      background: color-mix(in srgb, var(--mwc-surface-strong) 82%, transparent);
+    }
+    .workspace-actions .btn {
+      min-width: 6.2rem;
     }
   </style>
 </head>
 <body data-bs-theme="light">
   <div class="app-shell d-flex flex-column">
-    <div class="container py-4 py-lg-5 flex-grow-1">
-      <header class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3 mb-4">
+    <div class="container py-3 py-lg-4 flex-grow-1">
+      <header class="compact-header d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-2 mb-3">
         <div>
-          <div class="text-uppercase small fw-semibold text-primary mb-2">{{ tr.product_name }}</div>
-          <h1 class="display-6 fw-bold mb-1">{{ tr.admin_console }}</h1>
+          <div class="text-uppercase small fw-semibold text-primary mb-1">{{ tr.product_name }}</div>
+          <h1 class="h4 fw-bold mb-0">{{ tr.admin_console }}</h1>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
           <select class="form-select form-select-sm rounded-pill" id="langSelect" style="width:auto">
@@ -516,7 +529,7 @@ PAGE_TEMPLATE = """
         </div>
       </header>
 
-      <div class="d-flex flex-wrap gap-2 justify-content-end mb-4">
+      <div class="d-flex flex-wrap gap-2 justify-content-end mb-3">
         <span class="metric-chip fw-semibold">Host: {{ public_host }}</span>
         <span class="metric-chip fw-semibold">Timezone: {{ timezone }}</span>
         <span class="metric-chip fw-semibold">Users: {{ users|length }}</span>
@@ -529,7 +542,7 @@ PAGE_TEMPLATE = """
         </select>
       </div>
 
-      <div class="row g-4">
+      <div class="row g-3">
         <div class="col-12" {{ 'style=display:none;' if workspace_view != 'create' else '' }}>
           <section class="glass-panel section-card p-4 h-100">
             <div class="d-flex align-items-center gap-2 mb-3">
@@ -726,7 +739,7 @@ PAGE_TEMPLATE = """
                       </a>
                       {% endif %}
                     </div>
-                    <div class="d-flex flex-wrap align-items-start justify-content-lg-end gap-2">
+                    <div class="workspace-actions d-flex flex-wrap align-items-start justify-content-lg-end gap-2">
                       <a class="btn btn-primary" href="{{ user.public_url }}" target="_blank" rel="noopener noreferrer">
                         <i class="bi bi-box-arrow-up-right me-2"></i>{{ tr.open_workspace }}
                       </a>
@@ -783,7 +796,7 @@ PAGE_TEMPLATE = """
       </div>
     </div>
 
-    <footer class="footer-shell py-3">
+    <footer class="footer-shell py-2">
       <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 small">
         <div>{{ tr.product_name }} v{{ version }}</div>
         <div class="d-flex align-items-center gap-3">
@@ -1548,43 +1561,79 @@ ADMIN_DASHBOARD_TEMPLATE = """
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ tr.product_name }} - {{ tr.menu_dashboard }}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      background: radial-gradient(circle at top left, rgba(29, 78, 216, 0.14), transparent 26%), linear-gradient(180deg, #f4f7fb 0%, #e8eef8 100%);
+      font-family: "Segoe UI", sans-serif;
+    }
+    .compact-header {
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 1rem;
+      padding: 0.75rem 1rem;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(10px);
+    }
+    .dash-card {
+      border: 0;
+      border-radius: 1rem;
+      box-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+      min-height: 9.5rem;
+      transition: transform .15s ease;
+    }
+    .dash-card:hover {
+      transform: translateY(-2px);
+    }
+    .footer-shell {
+      border-top: 1px solid rgba(148, 163, 184, 0.24);
+      color: #6b7280;
+      background: rgba(255,255,255,0.72);
+    }
+  </style>
 </head>
-<body class="bg-light">
-  <div class="container py-4 py-lg-5">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+<body>
+  <div class="d-flex flex-column min-vh-100">
+  <div class="container py-3 py-lg-4 flex-grow-1">
+    <div class="compact-header d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
       <div>
         <div class="text-uppercase small fw-semibold text-primary">{{ tr.product_name }}</div>
-        <h1 class="h3 mb-0">{{ tr.menu_dashboard }}</h1>
+        <h1 class="h4 mb-0">{{ tr.menu_dashboard }}</h1>
       </div>
-      <form method="post" action="{{ url_for('logout') }}">
-        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-box-arrow-right me-2"></i>{{ tr.logout }}</button>
-      </form>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('workspaces_page', lang=lang) }}"><i class="bi bi-hdd-stack me-2"></i>{{ tr.menu_workspaces }}</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('admin_users_page', lang=lang) }}"><i class="bi bi-people me-2"></i>{{ tr.menu_users }}</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('proxmox_settings_page', lang=lang) }}"><i class="bi bi-hdd-network me-2"></i>{{ tr.menu_proxmox }}</a>
+        <form method="post" action="{{ url_for('logout') }}">
+          <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-box-arrow-right me-2"></i>{{ tr.logout }}</button>
+        </form>
+      </div>
     </div>
     {% if flash %}
     <div class="alert {{ 'alert-danger' if flash_error else 'alert-success' }} rounded-4" role="alert">{{ flash }}</div>
     {% endif %}
     <div class="row g-3">
       <div class="col-12 col-md-4">
-        <a class="card border-0 shadow-sm rounded-4 text-decoration-none text-body" href="{{ url_for('workspaces_page', lang=lang) }}">
-          <div class="card-body">
+        <a class="card dash-card text-decoration-none text-body h-100" href="{{ url_for('workspaces_page', lang=lang) }}">
+          <div class="card-body d-flex flex-column justify-content-between">
             <div class="text-body-secondary small">{{ tr.menu_workspaces }}</div>
             <div class="h4 mb-0">{{ users|length }}</div>
           </div>
         </a>
       </div>
       <div class="col-12 col-md-4">
-        <a class="card border-0 shadow-sm rounded-4 text-decoration-none text-body" href="{{ url_for('admin_users_page', lang=lang) }}">
-          <div class="card-body">
+        <a class="card dash-card text-decoration-none text-body h-100" href="{{ url_for('admin_users_page', lang=lang) }}">
+          <div class="card-body d-flex flex-column justify-content-between">
             <div class="text-body-secondary small">{{ tr.menu_users }}</div>
             <div class="h4 mb-0">{{ unique_user_count }}</div>
           </div>
         </a>
       </div>
       <div class="col-12 col-md-4">
-        <a class="card border-0 shadow-sm rounded-4 text-decoration-none text-body" href="{{ url_for('proxmox_settings_page', lang=lang) }}">
-          <div class="card-body">
+        <a class="card dash-card text-decoration-none text-body h-100" href="{{ url_for('proxmox_settings_page', lang=lang) }}">
+          <div class="card-body d-flex flex-column justify-content-between">
             <div class="text-body-secondary small">{{ tr.menu_proxmox }}</div>
             <div class="h4 mb-1 {{ 'text-success' if proxmox_mode else 'text-danger' }}">{{ '✓' if proxmox_mode else '✕' }}</div>
             {% if proxmox_summary %}
@@ -1596,6 +1645,17 @@ ADMIN_DASHBOARD_TEMPLATE = """
         </a>
       </div>
     </div>
+  </div>
+    <footer class="footer-shell py-2">
+      <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 small">
+        <div>{{ tr.product_name }} v{{ version }}</div>
+        <div class="d-flex align-items-center gap-3">
+          <a class="link-secondary text-decoration-none" href="{{ company_url }}" target="_blank" rel="noopener">neumeier.cloud</a>
+          <a class="link-secondary text-decoration-none" href="{{ github_url }}" target="_blank" rel="noopener">GitHub</a>
+          <span>&copy; {{ copyright_year }} {{ company_name }}</span>
+        </div>
+      </div>
+    </footer>
   </div>
 </body>
 </html>
@@ -3034,6 +3094,11 @@ def public_scheme() -> str:
     return request.scheme or "http"
 
 
+@APP.get("/favicon.ico")
+def favicon_ico():
+    return send_from_directory(APP.static_folder or "static", "favicon.svg", mimetype="image/svg+xml")
+
+
 def workspace_public_url(user: dict) -> str:
     if user.get("provider") == "proxmox_vm":
         info = user.get("proxmox", {})
@@ -3185,13 +3250,16 @@ def proxmox_launch(route: str):
         port = str(proxy.get("port", "")).strip()
         if not ticket or not port:
             raise RuntimeError("No ticket/port received from Proxmox vncproxy.")
-        websocket_path = f"api2/json/nodes/{node}/qemu/{int(vmid)}/vncwebsocket?port={port}&vncticket={ticket}"
-        novnc_url = "/novnc/vnc.html?" + urlencode(
+        novnc_url = "/pve/?" + urlencode(
             {
+                "console": "kvm",
+                "novnc": "1",
+                "node": node,
+                "vmid": str(int(vmid)),
+                "port": port,
+                "vncticket": ticket,
                 "autoconnect": "1",
                 "resize": "remote",
-                "path": websocket_path,
-                "show_dot": "1",
             }
         )
         return redirect(novnc_url)
@@ -3289,6 +3357,11 @@ def index():
         tr=tr,
         lang=lang,
         proxmox_mode=proxmox_enabled(),
+        version=APP_VERSION,
+        github_url=GITHUB_URL,
+        company_name=COMPANY_NAME,
+        company_url=COMPANY_URL,
+        copyright_year=datetime.utcnow().year,
         **flash_data,
     )
 
