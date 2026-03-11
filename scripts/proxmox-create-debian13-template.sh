@@ -32,6 +32,9 @@ CI_PASSWORD=""
 SSH_KEY_FILE=""
 IPCONFIG0="ip=dhcp"
 DESKTOP_PROFILE="xfce"  # xfce|none
+LOCALE="de_DE.UTF-8"
+KEYBOARD_LAYOUT="de"
+KEYBOARD_VARIANT=""
 FORCE=0
 TUI_MODE="auto"  # auto|on|off
 EXPLICIT_ARGS=0
@@ -57,6 +60,9 @@ Options:
   --ssh-key-file <path>    Inject SSH public key file (optional)
   --ipconfig0 <value>      cloud-init ipconfig0 (default: ${IPCONFIG0})
   --desktop-profile <id>   Desktop profile: xfce or none (default: ${DESKTOP_PROFILE})
+  --locale <locale>        System locale (default: ${LOCALE})
+  --keyboard-layout <id>   Keyboard layout (default: ${KEYBOARD_LAYOUT})
+  --keyboard-variant <id>  Keyboard variant (optional)
   --force                  Destroy existing VMID if present
   -h, --help               Show this help
 EOF
@@ -80,6 +86,9 @@ while [ "$#" -gt 0 ]; do
     --ssh-key-file) SSH_KEY_FILE="$2"; EXPLICIT_ARGS=1; shift 2 ;;
     --ipconfig0) IPCONFIG0="$2"; EXPLICIT_ARGS=1; shift 2 ;;
     --desktop-profile) DESKTOP_PROFILE="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --locale) LOCALE="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --keyboard-layout) KEYBOARD_LAYOUT="$2"; EXPLICIT_ARGS=1; shift 2 ;;
+    --keyboard-variant) KEYBOARD_VARIANT="$2"; EXPLICIT_ARGS=1; shift 2 ;;
     --force) FORCE=1; EXPLICIT_ARGS=1; shift 1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 1 ;;
@@ -201,6 +210,9 @@ run_wizard() {
   SSH_KEY_FILE="$(ui_input "SSH public key file path (optional)" "$SSH_KEY_FILE")"
   IPCONFIG0="$(ui_input "Cloud-init ipconfig0" "$IPCONFIG0")"
   DESKTOP_PROFILE="$(ui_input "Desktop profile (xfce/none)" "$DESKTOP_PROFILE")"
+  LOCALE="$(ui_input "System locale" "$LOCALE")"
+  KEYBOARD_LAYOUT="$(ui_input "Keyboard layout" "$KEYBOARD_LAYOUT")"
+  KEYBOARD_VARIANT="$(ui_input "Keyboard variant (optional)" "$KEYBOARD_VARIANT")"
 
   if ui_confirm "Replace an existing VM with same VMID if present?"; then
     FORCE=1
@@ -259,11 +271,18 @@ ensure_virt_customize() {
 }
 
 customize_image_for_desktop() {
+  ensure_virt_customize
+  echo "Applying locale (${LOCALE}) and keyboard (${KEYBOARD_LAYOUT}) defaults..."
+  virt-customize -a "${IMG_PATH}" \
+    --run-command "export DEBIAN_FRONTEND=noninteractive; apt-get update; apt-get install -y --no-install-recommends locales keyboard-configuration console-setup; apt-get clean; rm -rf /var/lib/apt/lists/*" \
+    --run-command "if ! grep -q '^${LOCALE} UTF-8' /etc/locale.gen; then echo '${LOCALE} UTF-8' >> /etc/locale.gen; fi; locale-gen '${LOCALE}'; update-locale LANG='${LOCALE}' LC_ALL='${LOCALE}'" \
+    --run-command "printf 'XKBMODEL=\"pc105\"\\nXKBLAYOUT=\"${KEYBOARD_LAYOUT}\"\\nXKBVARIANT=\"${KEYBOARD_VARIANT}\"\\nXKBOPTIONS=\"\"\\nBACKSPACE=\"guess\"\\n' > /etc/default/keyboard" \
+    --run-command "printf 'LANG=${LOCALE}\\nLC_ALL=${LOCALE}\\n' > /etc/default/locale"
+
   if [ "${DESKTOP_PROFILE}" = "none" ]; then
     echo "Desktop profile disabled (none). Continuing with headless cloud image."
     return 0
   fi
-  ensure_virt_customize
   echo "Customizing image with desktop profile '${DESKTOP_PROFILE}' (this can take several minutes)..."
   virt-customize -a "${IMG_PATH}" \
     --run-command "printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d; chmod +x /usr/sbin/policy-rc.d" \

@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.22] - 2026-03-11
+
+### Added
+- Proxmox Debian 13 template script now sets German defaults in the guest image:
+  - locale: `de_DE.UTF-8`
+  - keyboard layout: `de`
+- New script options for localization:
+  - `--locale`
+  - `--keyboard-layout`
+  - `--keyboard-variant`
+
+## [0.6.21] - 2026-03-10
+
+### Added
+- New Proxmox Template Builder in `/admin/proxmox/` with guided WebUI fields:
+  - Template VMID, name, storage, cloud-init storage, bridge, CPU, memory, disk, desktop profile
+  - Storage and bridge suggestions loaded from Proxmox API
+- Template build progress page with live status/log polling
+- Optional "replace existing VMID" support during template build
+
+### Changed
+- Proxmox settings now include SSH execution fields (host, port, user, optional private key) for WebUI-triggered template builds
+
+### Fixed
+- Added explicit template delete action in WebUI so old template VMIDs can be removed before rebuilds
+
 ## [0.6.20] - 2026-03-10
 
 ### Fixed

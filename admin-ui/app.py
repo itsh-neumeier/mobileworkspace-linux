@@ -176,6 +176,26 @@ TRANSLATIONS = {
         "workspace_list": "Workspace List",
         "create_workspace_form": "Create Workspace",
         "provisioning_progress": "Provisioning Progress",
+        "template_builder": "Template Builder",
+        "template_builder_help": "Create or replace a Debian 13 Proxmox template from the Web UI.",
+        "template_name": "Template Name",
+        "template_storage": "Disk Storage",
+        "template_ci_storage": "Cloud-Init Storage",
+        "template_bridge": "Bridge",
+        "template_disk_gb": "Disk Size (GB)",
+        "template_desktop_profile": "Desktop Profile",
+        "template_create": "Create Template",
+        "template_delete": "Delete Template",
+        "template_replace_existing": "Delete existing VMID before create",
+        "template_in_progress": "Template build is running in background.",
+        "proxmox_ssh_host": "Proxmox SSH Host",
+        "proxmox_ssh_port": "SSH Port",
+        "proxmox_ssh_user": "SSH User",
+        "proxmox_ssh_private_key": "SSH Private Key (optional)",
+        "proxmox_ssh_private_key_help": "Paste key content for passwordless SSH from admin-ui.",
+        "storage_detected": "Detected from Proxmox",
+        "template_job_logs": "Build Logs",
+        "template_progress": "Template Build Progress",
     },
     "de": {
         "product_name": "Mobile Web Console Hub",
@@ -264,6 +284,26 @@ TRANSLATIONS = {
         "workspace_list": "Workspace Liste",
         "create_workspace_form": "Workspace erstellen",
         "provisioning_progress": "Bereitstellungsfortschritt",
+        "template_builder": "Template Builder",
+        "template_builder_help": "Debian 13 Proxmox Template direkt ueber die WebUI erstellen oder ersetzen.",
+        "template_name": "Template Name",
+        "template_storage": "Disk Storage",
+        "template_ci_storage": "Cloud-Init Storage",
+        "template_bridge": "Bridge",
+        "template_disk_gb": "Disk Size (GB)",
+        "template_desktop_profile": "Desktop Profile",
+        "template_create": "Template erstellen",
+        "template_delete": "Template loeschen",
+        "template_replace_existing": "Vorherige VMID vor Erstellung loeschen",
+        "template_in_progress": "Template-Erstellung laeuft im Hintergrund.",
+        "proxmox_ssh_host": "Proxmox SSH Host",
+        "proxmox_ssh_port": "SSH Port",
+        "proxmox_ssh_user": "SSH User",
+        "proxmox_ssh_private_key": "SSH Private Key (optional)",
+        "proxmox_ssh_private_key_help": "Private Key Inhalt fuer passwortlosen SSH-Zugriff aus admin-ui.",
+        "storage_detected": "Von Proxmox erkannt",
+        "template_job_logs": "Build Logs",
+        "template_progress": "Template Build Fortschritt",
     },
 }
 
@@ -1066,6 +1106,10 @@ PROXMOX_SETTINGS_TEMPLATE = """
             <div class="col-6"><label class="form-label fw-semibold" for="cfg_vmid_max">{{ tr.vmid_max }}</label><input class="form-control" id="cfg_vmid_max" name="cfg_vmid_max" value="{{ proxmox_cfg.vmid_max }}"></div>
             <div class="col-12"><label class="form-label fw-semibold" for="cfg_token_id">{{ tr.proxmox_token_id }}</label><input class="form-control" id="cfg_token_id" name="cfg_token_id" value="{{ proxmox_cfg.token_id }}"></div>
             <div class="col-12"><label class="form-label fw-semibold" for="cfg_token_secret">{{ tr.proxmox_token_secret }}</label><input class="form-control" id="cfg_token_secret" name="cfg_token_secret" type="password" value="{{ proxmox_cfg.token_secret }}"></div>
+            <div class="col-12 col-md-6"><label class="form-label fw-semibold" for="cfg_ssh_host">{{ tr.proxmox_ssh_host }}</label><input class="form-control" id="cfg_ssh_host" name="cfg_ssh_host" value="{{ proxmox_cfg.ssh_host }}" placeholder="192.168.140.21"></div>
+            <div class="col-12 col-md-3"><label class="form-label fw-semibold" for="cfg_ssh_port">{{ tr.proxmox_ssh_port }}</label><input class="form-control" id="cfg_ssh_port" name="cfg_ssh_port" type="number" min="1" max="65535" value="{{ proxmox_cfg.ssh_port }}"></div>
+            <div class="col-12 col-md-3"><label class="form-label fw-semibold" for="cfg_ssh_user">{{ tr.proxmox_ssh_user }}</label><input class="form-control" id="cfg_ssh_user" name="cfg_ssh_user" value="{{ proxmox_cfg.ssh_user }}"></div>
+            <div class="col-12"><label class="form-label fw-semibold" for="cfg_ssh_private_key">{{ tr.proxmox_ssh_private_key }}</label><textarea class="form-control" id="cfg_ssh_private_key" name="cfg_ssh_private_key" rows="4">{{ proxmox_cfg.ssh_private_key }}</textarea><div class="form-text">{{ tr.proxmox_ssh_private_key_help }}</div></div>
             <div class="col-12">
               <div class="form-check">
                 <input class="form-check-input" type="checkbox" id="cfg_verify_tls" name="cfg_verify_tls" value="1" {{ 'checked' if proxmox_cfg.verify_tls else '' }}>
@@ -1078,6 +1122,91 @@ PROXMOX_SETTINGS_TEMPLATE = """
             <button class="btn btn-outline-secondary" formaction="{{ url_for('proxmox_test') }}" formmethod="post" type="submit"><i class="bi bi-plug me-2"></i>{{ tr.proxmox_api_test }}</button>
           </div>
         </form>
+      </div>
+    </div>
+    <div class="card border-0 shadow-sm rounded-4 mt-4">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-2">{{ tr.template_builder }}</h2>
+        <p class="text-body-secondary small mb-3">{{ tr.template_builder_help }}</p>
+        {% if active_template_job %}
+        <div class="alert alert-info rounded-4 d-flex align-items-center justify-content-between" role="alert">
+          <span>{{ tr.template_in_progress }}</span>
+          <a class="btn btn-sm btn-outline-primary" href="{{ url_for('proxmox_template_job_progress_page', job_id=active_template_job, lang=lang) }}">{{ tr.template_progress }}</a>
+        </div>
+        {% endif %}
+        <form method="post" action="{{ url_for('proxmox_template_create') }}" class="mb-4">
+          <div class="row g-3">
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-semibold" for="tmpl_vmid">{{ tr.proxmox_template_vmid }}</label>
+              <input class="form-control" id="tmpl_vmid" name="tmpl_vmid" value="{{ proxmox_cfg.template_vmid or '9000' }}" required>
+            </div>
+            <div class="col-12 col-md-8">
+              <label class="form-label fw-semibold" for="tmpl_name">{{ tr.template_name }}</label>
+              <input class="form-control" id="tmpl_name" name="tmpl_name" value="debian13-cloud-template" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="tmpl_storage">{{ tr.template_storage }}</label>
+              <input list="storage-options" class="form-control" id="tmpl_storage" name="tmpl_storage" placeholder="local-lvm" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="tmpl_ci_storage">{{ tr.template_ci_storage }}</label>
+              <input list="storage-options" class="form-control" id="tmpl_ci_storage" name="tmpl_ci_storage" placeholder="local-lvm" required>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label fw-semibold" for="tmpl_bridge">{{ tr.template_bridge }}</label>
+              <input list="bridge-options" class="form-control" id="tmpl_bridge" name="tmpl_bridge" value="{{ proxmox_cfg.net_bridge or 'vmbr0' }}" required>
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold" for="tmpl_cores">{{ tr.vm_cores }}</label>
+              <input class="form-control" id="tmpl_cores" name="tmpl_cores" type="number" min="1" max="32" value="2" required>
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold" for="tmpl_memory">{{ tr.vm_memory_mb }}</label>
+              <input class="form-control" id="tmpl_memory" name="tmpl_memory" type="number" min="1024" max="262144" value="4096" required>
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold" for="tmpl_disk_gb">{{ tr.template_disk_gb }}</label>
+              <input class="form-control" id="tmpl_disk_gb" name="tmpl_disk_gb" type="number" min="8" max="4096" value="32" required>
+            </div>
+            <div class="col-6 col-md-3">
+              <label class="form-label fw-semibold" for="tmpl_desktop_profile">{{ tr.template_desktop_profile }}</label>
+              <select class="form-select" id="tmpl_desktop_profile" name="tmpl_desktop_profile">
+                <option value="xfce">xfce</option>
+                <option value="none">none</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="tmpl_force" name="tmpl_force" value="1">
+                <label class="form-check-label" for="tmpl_force">{{ tr.template_replace_existing }}</label>
+              </div>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-magic me-2"></i>{{ tr.template_create }}</button>
+          </div>
+        </form>
+        <form method="post" action="{{ url_for('proxmox_template_delete') }}">
+          <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-4">
+              <label class="form-label fw-semibold" for="delete_template_vmid">{{ tr.proxmox_template_vmid }}</label>
+              <input class="form-control" id="delete_template_vmid" name="delete_template_vmid" value="{{ proxmox_cfg.template_vmid }}">
+            </div>
+            <div class="col-12 col-md-8">
+              <button class="btn btn-outline-danger" type="submit"><i class="bi bi-trash me-2"></i>{{ tr.template_delete }}</button>
+            </div>
+          </div>
+        </form>
+        <datalist id="storage-options">
+          {% for item in storage_options %}
+          <option value="{{ item }}"></option>
+          {% endfor %}
+        </datalist>
+        <datalist id="bridge-options">
+          {% for item in bridge_options %}
+          <option value="{{ item }}"></option>
+          {% endfor %}
+        </datalist>
       </div>
     </div>
   </div>
@@ -1280,6 +1409,70 @@ PROVISION_PROGRESS_TEMPLATE = """
 </html>
 """
 
+TEMPLATE_BUILD_PROGRESS_TEMPLATE = """
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ tr.product_name }} - {{ tr.template_progress }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <div class="card border-0 shadow-sm rounded-4 mx-auto" style="max-width: 860px;">
+      <div class="card-body p-4 p-lg-5">
+        <h1 class="h4 mb-3">{{ tr.template_progress }}</h1>
+        <div class="small text-body-secondary mb-2">Job: <span id="jobId">{{ job_id }}</span></div>
+        <div class="fw-semibold mb-2" id="statusText">Starting...</div>
+        <div class="progress mb-3" style="height: 22px;">
+          <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 1%;">1%</div>
+        </div>
+        <div class="small text-body-secondary mb-2">{{ tr.template_job_logs }}</div>
+        <pre id="logsBox" class="border rounded-3 p-3 bg-white" style="height: 280px; overflow: auto; font-size: 12px;"></pre>
+        <div class="d-flex gap-2 mt-3">
+          <a class="btn btn-outline-secondary" href="{{ url_for('proxmox_settings_page', lang=lang) }}">Back</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const statusText = document.getElementById("statusText");
+    const progressBar = document.getElementById("progressBar");
+    const logsBox = document.getElementById("logsBox");
+    const poll = async () => {
+      try {
+        const res = await fetch("{{ url_for('proxmox_template_job_status', job_id=job_id, lang=lang) }}", { cache: "no-store" });
+        const data = await res.json();
+        const pct = Math.max(0, Math.min(100, Number(data.progress || 0)));
+        progressBar.style.width = pct + "%";
+        progressBar.textContent = pct + "%";
+        statusText.textContent = data.message || data.state || "running";
+        const logs = Array.isArray(data.logs) ? data.logs : [];
+        logsBox.textContent = logs.join("\\n");
+        logsBox.scrollTop = logsBox.scrollHeight;
+        if (data.state === "done") {
+          progressBar.classList.remove("progress-bar-animated");
+          progressBar.classList.add("bg-success");
+          setTimeout(() => { window.location.href = "{{ url_for('proxmox_settings_page', lang=lang, message='Template build completed.') }}"; }, 1200);
+          return;
+        }
+        if (data.state === "error") {
+          progressBar.classList.remove("progress-bar-animated");
+          progressBar.classList.add("bg-danger");
+          return;
+        }
+      } catch (e) {
+        statusText.textContent = "Polling failed, retrying...";
+      }
+      setTimeout(poll, 1500);
+    };
+    poll();
+  </script>
+</body>
+</html>
+"""
+
 
 def ensure_storage() -> None:
     USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -1287,6 +1480,7 @@ def ensure_storage() -> None:
     BASE_COMPOSE.parent.mkdir(parents=True, exist_ok=True)
     ADMIN_USER_FILE.parent.mkdir(parents=True, exist_ok=True)
     PROXMOX_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    JOBS_DIR.mkdir(parents=True, exist_ok=True)
     if not USERS_FILE.exists():
         USERS_FILE.write_text("[]\n", encoding="utf-8")
     if not GENERATED_COMPOSE.exists():
@@ -1772,6 +1966,10 @@ def proxmox_default_settings() -> dict:
         "desktop_url_template": PROXMOX_DESKTOP_URL_TEMPLATE,
         "vmid_min": "",
         "vmid_max": "",
+        "ssh_host": "",
+        "ssh_port": 22,
+        "ssh_user": "root",
+        "ssh_private_key": "",
     }
 
 
@@ -1808,6 +2006,10 @@ def proxmox_settings() -> dict:
     merged["desktop_url_template"] = str(merged.get("desktop_url_template", PROXMOX_DESKTOP_URL_TEMPLATE)).strip()
     merged["vmid_min"] = str(merged.get("vmid_min", "")).strip()
     merged["vmid_max"] = str(merged.get("vmid_max", "")).strip()
+    merged["ssh_host"] = str(merged.get("ssh_host", "")).strip()
+    merged["ssh_port"] = parse_int_or_default(str(merged.get("ssh_port", "22")), 22, 1, 65535, "SSH port")
+    merged["ssh_user"] = str(merged.get("ssh_user", "root")).strip() or "root"
+    merged["ssh_private_key"] = str(merged.get("ssh_private_key", "")).strip()
     return merged
 
 
@@ -1819,15 +2021,26 @@ def current_provisioner_mode() -> str:
     return proxmox_settings().get("provisioner_mode", "docker")
 
 
-def proxmox_ready(settings: dict | None = None) -> tuple[bool, str]:
+def proxmox_api_config_ready(settings: dict | None = None) -> tuple[bool, str]:
     config = settings or proxmox_settings()
     required = {
         "api_url": config.get("api_url", ""),
         "node": config.get("node", ""),
         "token_id": config.get("token_id", ""),
         "token_secret": config.get("token_secret", ""),
-        "template_vmid": config.get("template_vmid", ""),
     }
+    missing = [key for key, value in required.items() if not value]
+    if missing:
+        return False, f"Missing Proxmox API configuration: {', '.join(missing)}"
+    return True, ""
+
+
+def proxmox_ready(settings: dict | None = None) -> tuple[bool, str]:
+    config = settings or proxmox_settings()
+    required = {"template_vmid": config.get("template_vmid", "")}
+    api_ok, api_message = proxmox_api_config_ready(config)
+    if not api_ok:
+        return False, api_message
     missing = [key for key, value in required.items() if not value]
     if missing:
         return False, f"Missing Proxmox configuration: {', '.join(missing)}"
@@ -1978,6 +2191,49 @@ def proxmox_node_usage() -> dict:
         "disk_used_gb": round(disk_used / (1024**3), 2),
         "disk_total_gb": round(disk_total / (1024**3), 2),
     }
+
+
+def proxmox_storage_options(settings: dict) -> list[str]:
+    api_ok, _ = proxmox_api_config_ready(settings)
+    if not api_ok:
+        return []
+    try:
+        items = proxmox_request("GET", f"/nodes/{settings['node']}/storage", settings)
+    except Exception:
+        return []
+    names: list[str] = []
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            storage_name = str(item.get("storage", "")).strip()
+            if not storage_name:
+                continue
+            if int(item.get("enabled", 1)) != 1:
+                continue
+            names.append(storage_name)
+    return sorted(set(names))
+
+
+def proxmox_bridge_options(settings: dict) -> list[str]:
+    api_ok, _ = proxmox_api_config_ready(settings)
+    if not api_ok:
+        return []
+    try:
+        items = proxmox_request("GET", f"/nodes/{settings['node']}/network", settings)
+    except Exception:
+        return []
+    names: list[str] = []
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("type", "")).strip().lower() != "bridge":
+                continue
+            iface = str(item.get("iface", "")).strip()
+            if iface:
+                names.append(iface)
+    return sorted(set(names))
 
 
 def proxmox_vm_stats(settings: dict, node: str, vmid: int) -> dict:
@@ -2146,6 +2402,169 @@ def proxmox_delete_vm(user: dict) -> tuple[bool, str]:
         if vm_missing_error(str(exc)):
             return True, f"VM {vmid} already absent."
         return False, f"Proxmox VM delete failed: {exc}"
+
+
+def template_job_file(job_id: str) -> Path:
+    return JOBS_DIR / f"{job_id}.json"
+
+
+def template_job_update(job_id: str, **fields) -> None:
+    JOBS_DIR.mkdir(parents=True, exist_ok=True)
+    job_path = template_job_file(job_id)
+    payload = {}
+    if job_path.exists():
+        try:
+            payload = json.loads(job_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {}
+    payload.update(fields)
+    payload["updated_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    job_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def template_job_read(job_id: str) -> dict:
+    job_path = template_job_file(job_id)
+    if not job_path.exists():
+        return {"state": "error", "progress": 100, "message": "Job not found.", "logs": []}
+    try:
+        payload = json.loads(job_path.read_text(encoding="utf-8"))
+    except Exception:
+        payload = {}
+    if "logs" not in payload or not isinstance(payload.get("logs"), list):
+        payload["logs"] = []
+    return payload
+
+
+def template_job_find_active() -> str:
+    if not JOBS_DIR.exists():
+        return ""
+    for path in sorted(JOBS_DIR.glob("*.json"), reverse=True):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if str(payload.get("state", "")).strip().lower() == "running":
+            return path.stem
+    return ""
+
+
+def proxmox_delete_template_vmid(settings: dict, vmid: int) -> tuple[bool, str]:
+    api_ok, api_message = proxmox_api_config_ready(settings)
+    if not api_ok:
+        return False, api_message
+    node = settings["node"]
+
+    def vm_missing_error(message: str) -> bool:
+        lowered = message.lower()
+        return "http 404" in lowered or "does not exist" in lowered or "not exist" in lowered
+
+    try:
+        proxmox_request("GET", f"/nodes/{node}/qemu/{vmid}/status/current", settings)
+    except Exception as exc:
+        if vm_missing_error(str(exc)):
+            return True, f"Template VM {vmid} already absent."
+        return False, f"Template pre-delete check failed: {exc}"
+
+    try:
+        proxmox_request_retry("POST", f"/nodes/{node}/qemu/{vmid}/status/stop", settings, {"timeout": 60})
+    except Exception:
+        pass
+
+    try:
+        proxmox_request_retry("DELETE", f"/nodes/{node}/qemu/{vmid}", settings, None)
+        return True, f"Template VM {vmid} deleted."
+    except Exception as exc:
+        if vm_missing_error(str(exc)):
+            return True, f"Template VM {vmid} already absent."
+        return False, f"Template delete failed: {exc}"
+
+
+def build_template_script_command(values: dict) -> list[str]:
+    cmd = [
+        "curl -fsSL https://raw.githubusercontent.com/itsh-neumeier/mobileworkspace-linux/main/scripts/proxmox-create-debian13-template.sh | sh -s --",
+        f"--vmid {values['vmid']}",
+        f"--name {values['name']}",
+        f"--storage {values['storage']}",
+        f"--ci-storage {values['ci_storage']}",
+        f"--bridge {values['bridge']}",
+        f"--cores {values['cores']}",
+        f"--memory {values['memory']}",
+        f"--disk-gb {values['disk_gb']}",
+        f"--desktop-profile {values['desktop_profile']}",
+        "--no-tui",
+    ]
+    if values.get("force_replace"):
+        cmd.append("--force")
+    return cmd
+
+
+def run_template_build_job(job_id: str, values: dict, settings: dict) -> None:
+    logs: list[str] = []
+    try:
+        ssh_host = str(settings.get("ssh_host", "")).strip()
+        ssh_port = int(settings.get("ssh_port", 22))
+        ssh_user = str(settings.get("ssh_user", "root")).strip() or "root"
+        ssh_key = str(settings.get("ssh_private_key", "")).strip()
+        if not ssh_host:
+            raise RuntimeError("Missing Proxmox SSH host in settings.")
+
+        script_parts = build_template_script_command(values)
+        remote_cmd = " ".join(script_parts)
+
+        template_job_update(job_id, state="running", progress=10, message="Preparing SSH execution...", logs=logs)
+        key_file = None
+        ssh_cmd = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-p", str(ssh_port)]
+        if ssh_key:
+            key_file = JOBS_DIR / f"{job_id}.key"
+            key_file.write_text(ssh_key + "\n", encoding="utf-8")
+            os.chmod(key_file, 0o600)
+            ssh_cmd.extend(["-i", str(key_file)])
+        ssh_cmd.append(f"{ssh_user}@{ssh_host}")
+        ssh_cmd.append(remote_cmd)
+
+        template_job_update(job_id, state="running", progress=20, message="Template build started on Proxmox host...", logs=logs)
+        process = subprocess.Popen(
+            ssh_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+        progress = 20
+        while True:
+            line = process.stdout.readline() if process.stdout else ""
+            if not line:
+                if process.poll() is not None:
+                    break
+                time.sleep(0.2)
+                continue
+            clean = line.rstrip()
+            logs.append(clean)
+            if len(logs) > 120:
+                logs = logs[-120:]
+            if "Downloading Debian 13 cloud image" in clean:
+                progress = max(progress, 30)
+            elif "Customizing image with desktop profile" in clean:
+                progress = max(progress, 50)
+            elif "Importing disk to storage" in clean:
+                progress = max(progress, 70)
+            elif "Converting VM" in clean:
+                progress = max(progress, 90)
+            template_job_update(job_id, state="running", progress=progress, message=clean, logs=logs)
+
+        rc = process.wait(timeout=10)
+        if key_file and key_file.exists():
+            key_file.unlink(missing_ok=True)
+        if rc != 0:
+            raise RuntimeError("Template build command failed. Check logs for details.")
+        template_job_update(job_id, state="done", progress=100, message="Template build completed successfully.", logs=logs)
+    except Exception as exc:
+        logs.append(str(exc))
+        if len(logs) > 120:
+            logs = logs[-120:]
+        template_job_update(job_id, state="error", progress=100, message=str(exc), logs=logs)
 
 
 def password_hash(plaintext: str) -> str:
@@ -2544,12 +2963,18 @@ def proxmox_settings_page():
     flash_data = current_flash()
     cfg = proxmox_settings()
     usage = proxmox_node_usage() if proxmox_enabled() else {}
+    storage_options = proxmox_storage_options(cfg)
+    bridge_options = proxmox_bridge_options(cfg)
+    active_template_job = template_job_find_active()
     return render_template_string(
         PROXMOX_SETTINGS_TEMPLATE,
         tr=tr,
         lang=lang,
         proxmox_cfg=cfg,
         usage=usage,
+        storage_options=storage_options,
+        bridge_options=bridge_options,
+        active_template_job=active_template_job,
         **flash_data,
     )
 
@@ -2577,6 +3002,10 @@ def save_proxmox_settings_route():
         cfg["vmid_max"] = request.form.get("cfg_vmid_max", "").strip()
         cfg["token_id"] = request.form.get("cfg_token_id", "").strip()
         cfg["token_secret"] = request.form.get("cfg_token_secret", "").strip()
+        cfg["ssh_host"] = request.form.get("cfg_ssh_host", "").strip()
+        cfg["ssh_port"] = parse_int_or_default(request.form.get("cfg_ssh_port", "22"), 22, 1, 65535, "SSH port")
+        cfg["ssh_user"] = request.form.get("cfg_ssh_user", "").strip() or "root"
+        cfg["ssh_private_key"] = request.form.get("cfg_ssh_private_key", "").strip()
         cfg["verify_tls"] = request.form.get("cfg_verify_tls") == "1"
         if cfg["vmid_min"] or cfg["vmid_max"]:
             vmid_min = parse_int_or_default(cfg["vmid_min"] or "1", 1, 1, 999999999, "VMID Min")
@@ -2598,6 +3027,106 @@ def save_proxmox_settings_route():
             endpoint="proxmox_settings_page",
         )
     return redirect_with_message("Proxmox settings saved.", endpoint="proxmox_settings_page")
+
+
+@APP.post("/admin/proxmox/template/create")
+@login_required
+def proxmox_template_create():
+    settings = proxmox_settings()
+    api_ok, api_message = proxmox_api_config_ready(settings)
+    if not api_ok:
+        return redirect_with_message(api_message, error=True, endpoint="proxmox_settings_page")
+    if not str(settings.get("ssh_host", "")).strip():
+        return redirect_with_message(
+            "Missing SSH host. Please configure Proxmox SSH settings first.",
+            error=True,
+            endpoint="proxmox_settings_page",
+        )
+
+    try:
+        vmid = parse_int_or_default(request.form.get("tmpl_vmid", ""), 9000, 1, 999999999, "Template VMID")
+        template_name = request.form.get("tmpl_name", "").strip() or "debian13-cloud-template"
+        storage = request.form.get("tmpl_storage", "").strip()
+        ci_storage = request.form.get("tmpl_ci_storage", "").strip() or storage
+        bridge = request.form.get("tmpl_bridge", "").strip() or settings.get("net_bridge", "vmbr0")
+        cores = parse_int_or_default(request.form.get("tmpl_cores", ""), 2, 1, 32, "vCPU cores")
+        memory = parse_int_or_default(request.form.get("tmpl_memory", ""), 4096, 512, 1048576, "VM memory")
+        disk_gb = parse_int_or_default(request.form.get("tmpl_disk_gb", ""), 32, 8, 4096, "Disk size")
+        desktop_profile = request.form.get("tmpl_desktop_profile", "xfce").strip().lower()
+        force_replace = request.form.get("tmpl_force") == "1"
+    except ValueError as exc:
+        return redirect_with_message(str(exc), error=True, endpoint="proxmox_settings_page")
+
+    if not storage:
+        return redirect_with_message("Template storage is required.", error=True, endpoint="proxmox_settings_page")
+    if desktop_profile not in {"xfce", "none"}:
+        return redirect_with_message("Unsupported desktop profile.", error=True, endpoint="proxmox_settings_page")
+
+    settings["template_vmid"] = str(vmid)
+    save_proxmox_settings(settings)
+
+    values = {
+        "vmid": vmid,
+        "name": template_name,
+        "storage": storage,
+        "ci_storage": ci_storage,
+        "bridge": bridge,
+        "cores": cores,
+        "memory": memory,
+        "disk_gb": disk_gb,
+        "desktop_profile": desktop_profile,
+        "force_replace": force_replace,
+    }
+
+    job_id = f"template-{uuid.uuid4().hex[:10]}"
+    template_job_update(
+        job_id,
+        state="running",
+        progress=1,
+        message="Queued template build job...",
+        logs=[f"Starting template build for VMID {vmid}"],
+    )
+    worker = threading.Thread(target=run_template_build_job, args=(job_id, values, settings), daemon=True)
+    worker.start()
+    return redirect(url_for("proxmox_template_job_progress_page", job_id=job_id, lang=current_lang()))
+
+
+@APP.post("/admin/proxmox/template/delete")
+@login_required
+def proxmox_template_delete():
+    settings = proxmox_settings()
+    try:
+        vmid = parse_int_or_default(request.form.get("delete_template_vmid", ""), 0, 1, 999999999, "Template VMID")
+    except ValueError as exc:
+        return redirect_with_message(str(exc), error=True, endpoint="proxmox_settings_page")
+    ok, message = proxmox_delete_template_vmid(settings, vmid)
+    return redirect_with_message(message, error=not ok, endpoint="proxmox_settings_page")
+
+
+@APP.get("/admin/proxmox/template/jobs/<job_id>/")
+@login_required
+def proxmox_template_job_progress_page(job_id: str):
+    lang = current_lang()
+    tr = TRANSLATIONS[lang]
+    return render_template_string(TEMPLATE_BUILD_PROGRESS_TEMPLATE, tr=tr, lang=lang, job_id=job_id)
+
+
+@APP.get("/admin/proxmox/template/jobs/<job_id>/status")
+@login_required
+def proxmox_template_job_status(job_id: str):
+    payload = template_job_read(job_id)
+    return APP.response_class(
+        response=json.dumps(
+            {
+                "state": payload.get("state", "running"),
+                "progress": payload.get("progress", 0),
+                "message": payload.get("message", ""),
+                "logs": payload.get("logs", []),
+            }
+        ),
+        status=200,
+        mimetype="application/json",
+    )
 
 
 @APP.post("/admin/users")
