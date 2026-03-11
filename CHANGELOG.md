@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.32] - 2026-03-11
+
+### Added
+- Create Workspace now uses an in-page progress popup modal with live status/progress updates
+- New async provisioning start endpoint for workspace creation:
+  - `POST /admin/users/provision-start`
+  - `GET /admin/provision/jobs/<job_id>/status`
+
+### Changed
+- Proxmox workspace creation emits step progress and task IDs into the provisioning job stream
+
 ## [0.6.31] - 2026-03-11
 
 ### Changed

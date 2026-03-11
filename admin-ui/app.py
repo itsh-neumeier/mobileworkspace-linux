@@ -563,7 +563,7 @@ PAGE_TEMPLATE = """
               </form>
             </div>
             {% endif %}
-            <form method="post" action="{{ url_for('create_user') }}">
+            <form method="post" action="{{ url_for('create_user') }}" id="workspaceCreateForm">
               <div class="mb-3">
                 <label class="form-label fw-semibold" for="username">{{ tr.username }}</label>
                 <input class="form-control" id="username" name="username" placeholder="ops-team" required>
@@ -809,6 +809,22 @@ PAGE_TEMPLATE = """
       </div>
     </div>
   </div>
+  <div class="modal fade" id="workspaceProgressModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">{{ tr.provisioning_progress }}</h5>
+        </div>
+        <div class="modal-body">
+          <div class="small text-body-secondary mb-2">Task: <span id="workspaceTaskId">-</span></div>
+          <div class="fw-semibold mb-2" id="workspaceProgressStatus">Starting...</div>
+          <div class="progress mb-2" style="height: 20px;">
+            <div id="workspaceProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 1%;">1%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     const root = document.documentElement;
@@ -836,6 +852,99 @@ PAGE_TEMPLATE = """
         const url = new URL(window.location.href);
         url.searchParams.set("view", e.target.value);
         window.location.href = url.toString();
+      });
+    }
+    const workspaceCreateForm = document.getElementById("workspaceCreateForm");
+    const workspaceProgressModalEl = document.getElementById("workspaceProgressModal");
+    const workspaceProgressModal = workspaceProgressModalEl ? new bootstrap.Modal(workspaceProgressModalEl, { backdrop: "static", keyboard: false }) : null;
+    const workspaceProgressBar = document.getElementById("workspaceProgressBar");
+    const workspaceProgressStatus = document.getElementById("workspaceProgressStatus");
+    const workspaceTaskId = document.getElementById("workspaceTaskId");
+    const updateWorkspaceProgress = (data) => {
+      const pct = Math.max(0, Math.min(100, Number(data.progress || 0)));
+      if (workspaceProgressBar) {
+        workspaceProgressBar.style.width = pct + "%";
+        workspaceProgressBar.textContent = pct + "%";
+      }
+      if (workspaceProgressStatus) {
+        workspaceProgressStatus.textContent = data.message || data.state || "running";
+      }
+      if (workspaceTaskId) {
+        workspaceTaskId.textContent = data.upid || "-";
+      }
+    };
+    const pollWorkspaceJob = async (jobId) => {
+      try {
+        const url = "{{ url_for('provision_job_status', job_id='__JOB__', lang=lang) }}".replace("__JOB__", encodeURIComponent(jobId));
+        const res = await fetch(url, { cache: "no-store" });
+        const data = await res.json();
+        updateWorkspaceProgress(data);
+        if (data.state === "done") {
+          if (workspaceProgressBar) {
+            workspaceProgressBar.classList.remove("progress-bar-animated");
+            workspaceProgressBar.classList.add("bg-success");
+          }
+          setTimeout(() => {
+            const target = new URL(window.location.href);
+            target.searchParams.set("view", "list");
+            target.searchParams.set("message", data.message || "Workspace created.");
+            target.searchParams.set("error", "0");
+            window.location.href = target.toString();
+          }, 700);
+          return;
+        }
+        if (data.state === "error") {
+          if (workspaceProgressBar) {
+            workspaceProgressBar.classList.remove("progress-bar-animated");
+            workspaceProgressBar.classList.add("bg-danger");
+          }
+          return;
+        }
+      } catch (e) {
+        if (workspaceProgressStatus) {
+          workspaceProgressStatus.textContent = "Polling failed, retrying...";
+        }
+      }
+      setTimeout(() => pollWorkspaceJob(jobId), 1200);
+    };
+    if (workspaceCreateForm) {
+      workspaceCreateForm.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const formData = new FormData(workspaceCreateForm);
+        if (workspaceProgressBar) {
+          workspaceProgressBar.classList.remove("bg-danger", "bg-success");
+          workspaceProgressBar.classList.add("progress-bar-animated");
+          workspaceProgressBar.style.width = "1%";
+          workspaceProgressBar.textContent = "1%";
+        }
+        if (workspaceProgressStatus) {
+          workspaceProgressStatus.textContent = "Starting provision job...";
+        }
+        if (workspaceTaskId) {
+          workspaceTaskId.textContent = "-";
+        }
+        workspaceProgressModal?.show();
+        try {
+          const startRes = await fetch("{{ url_for('provision_start', lang=lang) }}", {
+            method: "POST",
+            body: formData,
+          });
+          const startData = await startRes.json();
+          if (!startRes.ok || !startData.ok || !startData.job_id) {
+            throw new Error(startData.error || "Failed to start workspace provisioning.");
+          }
+          pollWorkspaceJob(startData.job_id);
+        } catch (err) {
+          if (workspaceProgressBar) {
+            workspaceProgressBar.classList.remove("progress-bar-animated");
+            workspaceProgressBar.classList.add("bg-danger");
+            workspaceProgressBar.style.width = "100%";
+            workspaceProgressBar.textContent = "100%";
+          }
+          if (workspaceProgressStatus) {
+            workspaceProgressStatus.textContent = String(err);
+          }
+        }
       });
     }
     const deleteModalEl = document.getElementById("deleteConfirmModal");
@@ -2526,7 +2635,7 @@ def enrich_proxmox_workspace_insights(users: list[dict]) -> list[dict]:
     return users
 
 
-def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
+def proxmox_create_vm_for_user(user: dict, progress_hook=None) -> tuple[bool, str]:
     settings = proxmox_settings()
     ok, message = proxmox_ready(settings)
     if not ok:
@@ -2535,6 +2644,8 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
         vmid = proxmox_pick_vmid(settings)
         node = settings["node"]
         vm_name = f"mwc-{vmid}"
+        if progress_hook:
+            progress_hook(10, f"Clone requested for VMID {vmid}...")
         clone_task = proxmox_request(
             "POST",
             f"/nodes/{node}/qemu/{settings['template_vmid']}/clone",
@@ -2548,9 +2659,13 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
         )
         if not clone_task:
             return False, "Proxmox clone did not return a task identifier."
+        if progress_hook:
+            progress_hook(25, f"Clone task started: {clone_task}", upid=str(clone_task))
         task_ok, task_status = proxmox_wait_task(settings, node, str(clone_task), timeout_seconds=900)
         if not task_ok:
             return False, f"Proxmox clone task failed: {task_status}"
+        if progress_hook:
+            progress_hook(55, "Applying VM configuration...")
         profile = user.get("proxmox_profile", {})
         cores = int(profile.get("cores", settings["vm_cores"]))
         memory_mb = int(profile.get("memory_mb", settings["vm_memory_mb"]))
@@ -2580,7 +2695,11 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
             config_payload,
         )
         if user.get("enabled", True) and start_on_create:
+            if progress_hook:
+                progress_hook(80, "Starting VM...")
             proxmox_request_retry("POST", f"/nodes/{node}/qemu/{vmid}/status/start", settings, {})
+        if progress_hook:
+            progress_hook(95, "Finalizing workspace metadata...")
         user["provider"] = "proxmox_vm"
         user["proxmox"] = {
             "vmid": vmid,
@@ -3401,46 +3520,42 @@ def proxmox_template_job_status(job_id: str):
     )
 
 
-@APP.post("/admin/users")
-@login_required
-def create_user():
-    users = load_users()
-    cfg = proxmox_settings()
+def parse_new_workspace_from_form(form, users: list[dict], cfg: dict) -> tuple[dict | None, str | None]:
     try:
-        username = validate_username(request.form["username"])
-        workspace_name = request.form.get("workspace_name", "").strip() or request.form.get("route", "").strip()
+        username = validate_username(form["username"])
+        workspace_name = form.get("workspace_name", "").strip() or form.get("route", "").strip()
         route = slugify(workspace_name)
-        workspace_type = request.form["workspace_type"]
-        network_mode = request.form["network_mode"]
-        password = request.form["password"]
-        proxmox_cores = parse_int_or_default(request.form.get("proxmox_cores", ""), cfg["vm_cores"], 1, 64, "vCPU cores")
+        workspace_type = form["workspace_type"]
+        network_mode = form["network_mode"]
+        password = form["password"]
+        proxmox_cores = parse_int_or_default(form.get("proxmox_cores", ""), cfg["vm_cores"], 1, 64, "vCPU cores")
         proxmox_memory_mb = parse_int_or_default(
-            request.form.get("proxmox_memory_mb", ""),
+            form.get("proxmox_memory_mb", ""),
             cfg["vm_memory_mb"],
             512,
             1048576,
             "VM memory",
         )
-        proxmox_bridge = (request.form.get("proxmox_bridge", "") or cfg["net_bridge"]).strip() or cfg["net_bridge"]
-        proxmox_disk = (request.form.get("proxmox_disk", "") or "").strip()
-        proxmox_start_on_create = request.form.get("proxmox_start_on_create") == "1"
-        proxmox_guest_user = guest_username(request.form.get("proxmox_guest_user", ""), username)
-        proxmox_guest_password = (request.form.get("proxmox_guest_password", "") or "").strip()
+        proxmox_bridge = (form.get("proxmox_bridge", "") or cfg["net_bridge"]).strip() or cfg["net_bridge"]
+        proxmox_disk = (form.get("proxmox_disk", "") or "").strip()
+        proxmox_start_on_create = form.get("proxmox_start_on_create") == "1"
+        proxmox_guest_user = guest_username(form.get("proxmox_guest_user", ""), username)
+        proxmox_guest_password = (form.get("proxmox_guest_password", "") or "").strip()
     except KeyError:
-        return redirect_with_message("Required form field missing.", error=True)
+        return None, "Required form field missing."
     except ValueError as exc:
-        return redirect_with_message(str(exc), error=True)
+        return None, str(exc)
 
     if workspace_type not in {"terminal", "desktop"}:
-        return redirect_with_message("Unsupported workspace type.", error=True)
+        return None, "Unsupported workspace type."
     if network_mode not in {"public", "internal"}:
-        return redirect_with_message("Unsupported network mode.", error=True)
+        return None, "Unsupported network mode."
     if any(user["route"] == route for user in users):
-        return redirect_with_message(f"Route '{route}' already exists.", error=True)
+        return None, f"Route '{route}' already exists."
     if not password:
-        return redirect_with_message("User password is required.", error=True)
+        return None, "User password is required."
     if proxmox_enabled() and workspace_type != "desktop":
-        return redirect_with_message("In Proxmox VM mode only desktop workspaces are supported.", error=True)
+        return None, "In Proxmox VM mode only desktop workspaces are supported."
 
     user = {
         "id": make_id(route, workspace_type),
@@ -3472,6 +3587,117 @@ def create_user():
         "volumes": build_volume_map(route, workspace_type),
         "created_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
     }
+    return user, None
+
+
+def run_workspace_provision_job(job_id: str, user: dict) -> None:
+    logs: list[str] = []
+
+    def update(progress: int, message: str, upid: str = "") -> None:
+        logs.append(message)
+        if len(logs) > 80:
+            del logs[:-80]
+        template_job_update(
+            job_id,
+            state="running",
+            progress=max(1, min(99, int(progress))),
+            message=message,
+            upid=upid,
+            logs=logs,
+        )
+
+    try:
+        update(5, "Starting workspace provision job...")
+        users = load_users()
+        if any(existing.get("route") == user.get("route") for existing in users):
+            raise RuntimeError(f"Route '{user.get('route')}' already exists.")
+        if proxmox_enabled():
+            ok, output = proxmox_create_vm_for_user(user, progress_hook=update)
+            if not ok:
+                raise RuntimeError(output)
+            users = load_users()
+            if any(existing.get("route") == user.get("route") for existing in users):
+                raise RuntimeError(f"Route '{user.get('route')}' was created concurrently.")
+            users.append(user)
+            save_users(users)
+            update(100, f"Workspace '{user.get('username')}' created as Proxmox VM.")
+            template_job_update(job_id, state="done", progress=100, message=f"Workspace '{user.get('username')}' created as Proxmox VM.", logs=logs)
+            return
+
+        users.append(user)
+        save_users(users)
+        update(50, "Applying docker compose configuration...")
+        ok, output = provision(users)
+        if not ok:
+            raise RuntimeError(f"User saved, but deploy failed: {trim_output(output)}")
+        update(100, f"Workspace '{user.get('username')}' created and deployed.")
+        template_job_update(job_id, state="done", progress=100, message=f"Workspace '{user.get('username')}' created and deployed.", logs=logs)
+    except Exception as exc:
+        logs.append(str(exc))
+        if len(logs) > 80:
+            del logs[:-80]
+        template_job_update(job_id, state="error", progress=100, message=trim_output(str(exc), 400), logs=logs)
+
+
+@APP.post("/admin/users/provision-start")
+@login_required
+def provision_start():
+    users = load_users()
+    cfg = proxmox_settings()
+    user, error = parse_new_workspace_from_form(request.form, users, cfg)
+    if error:
+        return APP.response_class(
+            response=json.dumps({"ok": False, "error": error}),
+            status=400,
+            mimetype="application/json",
+        )
+
+    job_id = f"workspace-{uuid.uuid4().hex[:10]}"
+    template_job_update(
+        job_id,
+        state="running",
+        progress=1,
+        message="Queued workspace provisioning...",
+        upid="",
+        logs=["Queued workspace provisioning..."],
+    )
+    worker = threading.Thread(target=run_workspace_provision_job, args=(job_id, user), daemon=True)
+    worker.start()
+    return APP.response_class(
+        response=json.dumps({"ok": True, "job_id": job_id}),
+        status=200,
+        mimetype="application/json",
+    )
+
+
+@APP.get("/admin/provision/jobs/<job_id>/status")
+@login_required
+def provision_job_status(job_id: str):
+    payload = template_job_read(job_id)
+    return APP.response_class(
+        response=json.dumps(
+            {
+                "state": payload.get("state", "running"),
+                "progress": payload.get("progress", 0),
+                "message": payload.get("message", ""),
+                "upid": payload.get("upid", ""),
+                "logs": payload.get("logs", []),
+            }
+        ),
+        status=200,
+        mimetype="application/json",
+    )
+
+
+@APP.post("/admin/users")
+@login_required
+def create_user():
+    users = load_users()
+    cfg = proxmox_settings()
+    user, error = parse_new_workspace_from_form(request.form, users, cfg)
+    if error:
+        return redirect_with_message(error, error=True)
+    username = str(user.get("username", "workspace"))
     if proxmox_enabled():
         ok, output = proxmox_create_vm_for_user(user)
         if not ok:
