@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.25] - 2026-03-11
+
+### Fixed
+- Proxmox workspace VM creation now enforces graphical console defaults (`vga=std`) and removes inherited `serial0` to avoid desktop workspaces booting into serial-only TTY view
+
+### Changed
+- Debian 13 desktop template customization now includes `xfce4-goodies` and `xserver-xorg-video-qxl` for more reliable graphical noVNC sessions
+
+## [0.6.24] - 2026-03-11
+
+### Changed
+- Replaced browser `prompt()` SSH credential input with an in-page Bootstrap modal for template creation when no SSH private key is configured
+- Improved template form sample placeholders and helper hints for storage/bridge fields
+
 ## [0.6.23] - 2026-03-11
 
 ### Added

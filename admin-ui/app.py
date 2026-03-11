@@ -197,6 +197,10 @@ TRANSLATIONS = {
         "storage_detected": "Detected from Proxmox",
         "template_job_logs": "Build Logs",
         "template_progress": "Template Build Progress",
+        "ssh_runtime_modal_title": "SSH Credentials Required",
+        "ssh_runtime_modal_text": "No SSH private key is configured. Please enter SSH user and password for this run.",
+        "cancel": "Cancel",
+        "continue": "Continue",
     },
     "de": {
         "product_name": "Mobile Web Console Hub",
@@ -305,6 +309,10 @@ TRANSLATIONS = {
         "storage_detected": "Von Proxmox erkannt",
         "template_job_logs": "Build Logs",
         "template_progress": "Template Build Fortschritt",
+        "ssh_runtime_modal_title": "SSH Zugangsdaten erforderlich",
+        "ssh_runtime_modal_text": "Es ist kein SSH Private Key konfiguriert. Bitte SSH Benutzer und Passwort fuer diesen Lauf eingeben.",
+        "cancel": "Abbrechen",
+        "continue": "Weiter",
     },
 }
 
@@ -1215,35 +1223,101 @@ PROXMOX_SETTINGS_TEMPLATE = """
       </div>
     </div>
   </div>
+  <div class="modal fade" id="sshRuntimeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">{{ tr.ssh_runtime_modal_title }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-body-secondary mb-3">{{ tr.ssh_runtime_modal_text }}</p>
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="runtime_ssh_user">{{ tr.proxmox_ssh_user }}</label>
+            <input class="form-control" id="runtime_ssh_user" placeholder="root">
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold" for="runtime_ssh_password">{{ tr.password }}</label>
+            <input class="form-control" id="runtime_ssh_password" type="password" placeholder="••••••••" autocomplete="off">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ tr.cancel }}</button>
+          <button type="button" class="btn btn-primary" id="runtimeSshContinue">{{ tr.continue }}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     (() => {
       const form = document.getElementById("templateCreateForm");
       if (!form) return;
+      const keyEl = document.getElementById("cfg_ssh_private_key");
+      const defaultUserEl = document.getElementById("cfg_ssh_user");
+      const userHidden = document.getElementById("tmpl_ssh_user");
+      const passHidden = document.getElementById("tmpl_ssh_password");
+      const modalEl = document.getElementById("sshRuntimeModal");
+      const runtimeUserEl = document.getElementById("runtime_ssh_user");
+      const runtimePassEl = document.getElementById("runtime_ssh_password");
+      const runtimeContinueEl = document.getElementById("runtimeSshContinue");
+      const runtimeModal = modalEl ? new bootstrap.Modal(modalEl) : null;
+      let waitingSubmit = false;
+
+      const submitIfReady = () => {
+        const user = (runtimeUserEl?.value || "").trim();
+        const pass = runtimePassEl?.value || "";
+        if (!user || !pass) {
+          alert("SSH user and password are required.");
+          return;
+        }
+        userHidden.value = user;
+        passHidden.value = pass;
+        waitingSubmit = false;
+        runtimeModal?.hide();
+        form.submit();
+      };
+
+      if (runtimeContinueEl) {
+        runtimeContinueEl.addEventListener("click", submitIfReady);
+      }
+
       form.addEventListener("submit", (ev) => {
-        const keyEl = document.getElementById("cfg_ssh_private_key");
-        const defaultUserEl = document.getElementById("cfg_ssh_user");
-        const userHidden = document.getElementById("tmpl_ssh_user");
-        const passHidden = document.getElementById("tmpl_ssh_password");
         if (!userHidden || !passHidden) return;
+        if (waitingSubmit) return;
         userHidden.value = "";
         passHidden.value = "";
         const keyValue = (keyEl?.value || "").trim();
         if (keyValue.length > 0) return;
-        const fallbackUser = (defaultUserEl?.value || "root").trim() || "root";
-        const promptUser = window.prompt("SSH user for Proxmox host", fallbackUser);
-        if (!promptUser) {
-          ev.preventDefault();
+        ev.preventDefault();
+        if (!runtimeModal || !runtimeUserEl || !runtimePassEl) {
+          alert("SSH key missing. Please configure SSH private key in settings.");
           return;
         }
-        const promptPass = window.prompt("SSH password for " + promptUser, "");
-        if (promptPass === null || promptPass === "") {
-          ev.preventDefault();
-          alert("SSH password is required when no private key is configured.");
-          return;
-        }
-        userHidden.value = promptUser.trim();
-        passHidden.value = promptPass;
+        waitingSubmit = true;
+        runtimeUserEl.value = (defaultUserEl?.value || "root").trim() || "root";
+        runtimePassEl.value = "";
+        runtimeModal.show();
       });
+
+      if (modalEl) {
+        modalEl.addEventListener("hidden.bs.modal", () => {
+          if (waitingSubmit) {
+            waitingSubmit = false;
+            userHidden.value = "";
+            passHidden.value = "";
+          }
+        });
+      }
+      if (runtimePassEl) {
+        runtimePassEl.addEventListener("keydown", (ev) => {
+          if (ev.key !== "Enter") {
+            return;
+          }
+          ev.preventDefault();
+          submitIfReady();
+        });
+      }
     })();
   </script>
 </body>
@@ -2372,6 +2446,8 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
             "cipassword": guest_password,
             "ipconfig0": "ip=dhcp",
             "tags": "mobileworkspace",
+            "vga": "std",
+            "delete": "serial0",
         }
         if disk_override:
             config_payload["scsi0"] = disk_override
