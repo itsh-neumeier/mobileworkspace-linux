@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.36] - 2026-03-11
+
+### Fixed
+- Desktop first-boot hardening script now:
+  - detects the primary cloud user (UID >= 1000)
+  - installs `sudo` if missing
+  - adds user to `sudo` group
+  - writes `NOPASSWD` sudo rule for that user
+  - enforces LightDM autologin fallback for that user on first boot
+- This addresses recurring `tty`-only desktop boots and missing sudo capability in cloned workspace VMs
+
 ## [0.6.35] - 2026-03-11
 
 ### Fixed
