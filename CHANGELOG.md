@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.26] - 2026-03-11
+
+### Added
+- Proxmox workspace cards now provide explicit VM control buttons: `Start`, `Stop`, `Restart`, `Kill`
+- Delete action now uses an in-page confirmation modal before workspace/VM removal
+
+### Changed
+- Proxmox VM delete flow now performs one-click sequence (`stop/kill -> wait -> delete -> wait`) instead of requiring repeated delete attempts
+- VM action responses now include Proxmox task IDs (`UPID`) so operation feedback is always traceable
+
 ## [0.6.25] - 2026-03-11
 
 ### Fixed

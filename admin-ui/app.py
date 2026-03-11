@@ -201,6 +201,13 @@ TRANSLATIONS = {
         "ssh_runtime_modal_text": "No SSH private key is configured. Please enter SSH user and password for this run.",
         "cancel": "Cancel",
         "continue": "Continue",
+        "start": "Start",
+        "stop": "Stop",
+        "restart": "Restart",
+        "kill": "Kill",
+        "delete_confirm_title": "Confirm deletion",
+        "delete_confirm_text": "This removes the workspace and its VM. Continue?",
+        "confirm_delete": "Delete now",
     },
     "de": {
         "product_name": "Mobile Web Console Hub",
@@ -313,6 +320,13 @@ TRANSLATIONS = {
         "ssh_runtime_modal_text": "Es ist kein SSH Private Key konfiguriert. Bitte SSH Benutzer und Passwort fuer diesen Lauf eingeben.",
         "cancel": "Abbrechen",
         "continue": "Weiter",
+        "start": "Start",
+        "stop": "Stop",
+        "restart": "Restart",
+        "kill": "Kill",
+        "delete_confirm_title": "Loeschen bestaetigen",
+        "delete_confirm_text": "Workspace und zugehoerige VM werden entfernt. Fortfahren?",
+        "confirm_delete": "Jetzt loeschen",
     },
 }
 
@@ -685,26 +699,35 @@ PAGE_TEMPLATE = """
                       <a class="btn btn-primary" href="{{ user.public_url }}" target="_blank" rel="noopener noreferrer">
                         <i class="bi bi-box-arrow-up-right me-2"></i>{{ tr.open_workspace }}
                       </a>
+                      {% if user.provider == 'proxmox_vm' %}
+                      <form method="post" action="{{ url_for('proxmox_user_vm_action', user_id=user.id, action='start') }}">
+                        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-play-circle me-2"></i>{{ tr.start }}</button>
+                      </form>
+                      <form method="post" action="{{ url_for('proxmox_user_vm_action', user_id=user.id, action='stop') }}">
+                        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-pause-circle me-2"></i>{{ tr.stop }}</button>
+                      </form>
+                      <form method="post" action="{{ url_for('proxmox_user_vm_action', user_id=user.id, action='restart') }}">
+                        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-arrow-repeat me-2"></i>{{ tr.restart }}</button>
+                      </form>
+                      <form method="post" action="{{ url_for('proxmox_user_vm_action', user_id=user.id, action='kill') }}">
+                        <button class="btn btn-outline-warning" type="submit"><i class="bi bi-lightning-charge me-2"></i>{{ tr.kill }}</button>
+                      </form>
+                      {% else %}
                       {% if user.enabled %}
                       <form method="post" action="{{ url_for('toggle_user', user_id=user.id, action='disable') }}">
-                        <button class="btn btn-outline-secondary" type="submit">
-                          <i class="bi bi-pause-circle me-2"></i>{{ tr.disable }}
-                        </button>
+                        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-pause-circle me-2"></i>{{ tr.disable }}</button>
                       </form>
                       {% else %}
                       <form method="post" action="{{ url_for('toggle_user', user_id=user.id, action='enable') }}">
-                        <button class="btn btn-primary" type="submit">
-                          <i class="bi bi-play-circle me-2"></i>{{ tr.enable }}
-                        </button>
+                        <button class="btn btn-primary" type="submit"><i class="bi bi-play-circle me-2"></i>{{ tr.enable }}</button>
                       </form>
                       {% endif %}
                       <form method="post" action="{{ url_for('redeploy_user', user_id=user.id) }}">
-                        <button class="btn btn-outline-secondary" type="submit">
-                          <i class="bi bi-arrow-repeat me-2"></i>{{ tr.redeploy }}
-                        </button>
+                        <button class="btn btn-outline-secondary" type="submit"><i class="bi bi-arrow-repeat me-2"></i>{{ tr.redeploy }}</button>
                       </form>
-                      <form method="post" action="{{ url_for('delete_user', user_id=user.id) }}">
-                        <button class="btn btn-outline-danger" type="submit">
+                      {% endif %}
+                      <form method="post" id="delete-form-{{ user.id }}" action="{{ url_for('delete_user', user_id=user.id) }}">
+                        <button class="btn btn-outline-danger js-delete-btn" type="button" data-delete-form-id="delete-form-{{ user.id }}">
                           <i class="bi bi-trash3 me-2"></i>{{ tr.delete }}
                         </button>
                       </form>
@@ -737,6 +760,22 @@ PAGE_TEMPLATE = """
       </div>
     </footer>
   </div>
+  <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">{{ tr.delete_confirm_title }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">{{ tr.delete_confirm_text }}</div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{ tr.cancel }}</button>
+          <button type="button" class="btn btn-danger" id="confirmDeleteBtn">{{ tr.confirm_delete }}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     const root = document.documentElement;
     const body = document.body;
@@ -763,6 +802,30 @@ PAGE_TEMPLATE = """
         const url = new URL(window.location.href);
         url.searchParams.set("view", e.target.value);
         window.location.href = url.toString();
+      });
+    }
+    const deleteModalEl = document.getElementById("deleteConfirmModal");
+    const deleteModal = deleteModalEl ? new bootstrap.Modal(deleteModalEl) : null;
+    const confirmDeleteBtn = document.getElementById("confirmDeleteBtn");
+    let pendingDeleteFormId = "";
+    document.querySelectorAll(".js-delete-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        pendingDeleteFormId = btn.getAttribute("data-delete-form-id") || "";
+        if (!pendingDeleteFormId) {
+          return;
+        }
+        deleteModal?.show();
+      });
+    });
+    if (confirmDeleteBtn) {
+      confirmDeleteBtn.addEventListener("click", () => {
+        if (!pendingDeleteFormId) {
+          return;
+        }
+        const form = document.getElementById(pendingDeleteFormId);
+        if (form) {
+          form.submit();
+        }
       });
     }
   </script>
@@ -2472,7 +2535,7 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
         return False, f"Proxmox VM creation failed: {exc}"
 
 
-def proxmox_vm_action(user: dict, action: str) -> tuple[bool, str]:
+def proxmox_vm_action(user: dict, action: str, force: bool = False, wait: bool = False) -> tuple[bool, str]:
     settings = proxmox_settings()
     info = user.get("proxmox", {})
     vmid = info.get("vmid")
@@ -2480,8 +2543,22 @@ def proxmox_vm_action(user: dict, action: str) -> tuple[bool, str]:
     if not vmid:
         return False, "User has no linked Proxmox VM."
     try:
-        proxmox_request_retry("POST", f"/nodes/{node}/qemu/{vmid}/status/{action}", settings, {})
-        return True, f"VM {vmid} {action} requested."
+        payload = {}
+        effective_action = action
+        if action == "kill":
+            effective_action = "stop"
+            payload = {"timeout": 1, "skiplock": 1}
+        elif action == "stop":
+            payload = {"timeout": 30}
+            if force:
+                payload["skiplock"] = 1
+        task_id = proxmox_request_retry("POST", f"/nodes/{node}/qemu/{vmid}/status/{effective_action}", settings, payload)
+        task_text = str(task_id).strip() if task_id else "n/a"
+        if wait and task_id:
+            task_ok, task_status = proxmox_wait_task(settings, node, str(task_id), timeout_seconds=300)
+            if not task_ok:
+                return False, f"VM {vmid} {effective_action} task {task_text} failed: {task_status}"
+        return True, f"VM {vmid} {effective_action} requested. Task: {task_text}"
     except Exception as exc:
         return False, f"Proxmox action '{action}' failed: {exc}"
 
@@ -2503,13 +2580,24 @@ def proxmox_delete_vm(user: dict) -> tuple[bool, str]:
         if vm_missing_error(str(exc)):
             return True, f"VM {vmid} already absent."
         return False, f"Proxmox VM pre-delete check failed: {exc}"
+    stop_task_text = "n/a"
+    stop_ok, stop_msg = proxmox_vm_action(user, "stop", wait=True)
+    if stop_ok and "Task:" in stop_msg:
+        stop_task_text = stop_msg.split("Task:", 1)[1].strip()
+    elif not stop_ok:
+        force_ok, force_msg = proxmox_vm_action(user, "kill", wait=True)
+        if force_ok and "Task:" in force_msg:
+            stop_task_text = force_msg.split("Task:", 1)[1].strip()
+        elif not vm_missing_error(stop_msg) and not vm_missing_error(force_msg):
+            return False, f"VM {vmid} stop before delete failed: {stop_msg} | {force_msg}"
     try:
-        proxmox_request_retry("POST", f"/nodes/{node}/qemu/{vmid}/status/stop", settings, {"timeout": 30})
-    except Exception:
-        pass
-    try:
-        proxmox_request_retry("DELETE", f"/nodes/{node}/qemu/{vmid}", settings, None)
-        return True, f"VM {vmid} deleted."
+        delete_task = proxmox_request_retry("DELETE", f"/nodes/{node}/qemu/{vmid}", settings, None)
+        delete_task_text = str(delete_task).strip() if delete_task else "n/a"
+        if delete_task:
+            delete_ok, delete_status = proxmox_wait_task(settings, node, str(delete_task), timeout_seconds=300)
+            if not delete_ok:
+                return False, f"VM {vmid} delete task {delete_task_text} failed: {delete_status}"
+        return True, f"VM {vmid} deleted. Stop task: {stop_task_text} | Delete task: {delete_task_text}"
     except Exception as exc:
         if vm_missing_error(str(exc)):
             return True, f"VM {vmid} already absent."
@@ -3358,7 +3446,7 @@ def toggle_user(user_id: str, action: str):
     save_users(users)
     if user.get("provider") == "proxmox_vm":
         vm_action = "start" if user["enabled"] else "stop"
-        ok, output = proxmox_vm_action(user, vm_action)
+        ok, output = proxmox_vm_action(user, vm_action, wait=False)
         if not ok:
             return redirect_with_message(trim_output(output), error=True)
         return redirect_with_message(f"Workspace '{user['username']}' {action}d.")
@@ -3376,11 +3464,11 @@ def redeploy_user(user_id: str):
     if not user:
         return redirect_with_message("User not found.", error=True)
     if user.get("provider") == "proxmox_vm":
-        ok_stop, out_stop = proxmox_vm_action(user, "stop")
-        ok_start, out_start = proxmox_vm_action(user, "start")
+        ok_stop, out_stop = proxmox_vm_action(user, "stop", wait=True)
+        ok_start, out_start = proxmox_vm_action(user, "start", wait=False)
         if not ok_stop and not ok_start:
             return redirect_with_message(f"Redeploy failed: {trim_output(out_stop)}", error=True)
-        return redirect_with_message(f"Workspace '{user['username']}' VM restarted.")
+        return redirect_with_message(f"Workspace '{user['username']}' VM restarted. {trim_output(out_stop)} | {trim_output(out_start)}")
     ok, output = provision(users)
     if not ok:
         return redirect_with_message(f"Redeploy failed: {trim_output(output)}", error=True)
@@ -3406,6 +3494,28 @@ def delete_user(user_id: str):
     if not ok:
         return redirect_with_message(f"User removed from config, but deploy failed: {trim_output(output)}", error=True)
     return redirect_with_message(f"Workspace '{user['username']}' deleted.")
+
+
+@APP.post("/admin/users/<user_id>/vm/<action>")
+@login_required
+def proxmox_user_vm_action(user_id: str, action: str):
+    users = load_users()
+    user = find_user(users, user_id)
+    if not user:
+        return redirect_with_message("User not found.", error=True)
+    if user.get("provider") != "proxmox_vm":
+        return redirect_with_message("VM actions are only available for Proxmox workspaces.", error=True)
+    if action not in {"start", "stop", "restart", "kill"}:
+        return redirect_with_message("Unsupported VM action.", error=True)
+    if action == "restart":
+        ok, output = proxmox_vm_action(user, "reboot", wait=False)
+    elif action == "kill":
+        ok, output = proxmox_vm_action(user, "kill", wait=True)
+    else:
+        ok, output = proxmox_vm_action(user, action, wait=(action == "stop"))
+    if not ok:
+        return redirect_with_message(trim_output(output), error=True)
+    return redirect_with_message(trim_output(output))
 
 
 def trim_output(output: str, limit: int = 220) -> str:
