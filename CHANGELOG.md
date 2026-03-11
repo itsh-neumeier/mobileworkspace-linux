@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.29] - 2026-03-11
+
+### Changed
+- Desktop template boot path hardened for graphical Proxmox console:
+  - sets `/etc/X11/default-display-manager` to LightDM
+  - adds LightDM XFCE seat config
+  - masks `getty@tty1` to avoid TTY takeover on desktop profile
+- Desktop VM VGA defaults switched to `qxl` (template + workspace VM config)
+
+## [0.6.28] - 2026-03-11
+
+### Changed
+- Proxmox workspace VMs are now named using a unique identifier format: `mwc-<vmid>` (for example `mwc-20001`)
+
 ## [0.6.27] - 2026-03-11
 
 ### Changed

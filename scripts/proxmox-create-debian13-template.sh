@@ -292,6 +292,9 @@ customize_image_for_desktop() {
     --run-command "ln -sf /lib/systemd/system/graphical.target /etc/systemd/system/default.target" \
     --run-command "ln -sf /lib/systemd/system/lightdm.service /etc/systemd/system/graphical.target.wants/lightdm.service" \
     --run-command "ln -sf /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service" \
+    --run-command "printf '/usr/sbin/lightdm\n' > /etc/X11/default-display-manager" \
+    --run-command "mkdir -p /etc/lightdm/lightdm.conf.d; printf '[Seat:*]\nuser-session=xfce\n' > /etc/lightdm/lightdm.conf.d/50-mwc-xfce.conf" \
+    --run-command "ln -sf /dev/null /etc/systemd/system/getty@tty1.service" \
     --run-command "ln -sf /lib/systemd/system/xrdp.service /etc/systemd/system/multi-user.target.wants/xrdp.service" \
     --run-command "echo xfce4-session > /etc/skel/.xsession"
 }
@@ -318,7 +321,7 @@ qm create "${VMID}" \
 if [ "${DESKTOP_PROFILE}" = "none" ]; then
   qm set "${VMID}" --serial0 socket --vga serial0
 else
-  qm set "${VMID}" --vga std
+  qm set "${VMID}" --vga qxl
 fi
 
 echo "Importing disk to storage ${STORAGE}..."

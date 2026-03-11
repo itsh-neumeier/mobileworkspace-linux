@@ -2492,13 +2492,14 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
     try:
         vmid = proxmox_pick_vmid(settings)
         node = settings["node"]
+        vm_name = f"mwc-{vmid}"
         clone_task = proxmox_request(
             "POST",
             f"/nodes/{node}/qemu/{settings['template_vmid']}/clone",
             settings,
             {
                 "newid": vmid,
-                "name": f"mwc-{user['route']}",
+                "name": vm_name,
                 "target": node,
                 "full": 1,
             },
@@ -2525,7 +2526,7 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
             "cipassword": guest_password,
             "ipconfig0": "ip=dhcp",
             "tags": "mobileworkspace",
-            "vga": "std",
+            "vga": "qxl",
             "delete": "serial0",
         }
         if disk_override:
@@ -2542,7 +2543,7 @@ def proxmox_create_vm_for_user(user: dict) -> tuple[bool, str]:
         user["proxmox"] = {
             "vmid": vmid,
             "node": node,
-            "name": f"mwc-{user['route']}",
+            "name": vm_name,
             "access_url": proxmox_vm_access_url(vmid, node),
             "guest_user": guest_user,
         }
