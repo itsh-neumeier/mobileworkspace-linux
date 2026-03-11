@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.37] - 2026-03-11
+
+### Fixed
+- Resolved shell syntax error in Debian template desktop first-boot script generation (`Syntax error: "(" unexpected`)
+- Replaced brittle inline command substitution with a robust heredoc-based script writer for `mwc-firstboot-desktop.sh`
+
 ## [0.6.36] - 2026-03-11
 
 ### Fixed

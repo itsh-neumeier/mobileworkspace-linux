@@ -295,7 +295,35 @@ customize_image_for_desktop() {
     --run-command "printf '/usr/sbin/lightdm\n' > /etc/X11/default-display-manager" \
     --run-command "mkdir -p /etc/lightdm/lightdm.conf.d; printf '[Seat:*]\nuser-session=xfce\ngreeter-session=lightdm-gtk-greeter\n' > /etc/lightdm/lightdm.conf.d/50-mwc-xfce.conf" \
     --run-command "ln -sf /dev/null /etc/systemd/system/getty@tty1.service" \
-    --run-command "printf '#!/bin/sh\nset -eu\nPRIMARY_USER=\"$(awk -F: '\''$3 >= 1000 && $3 < 65000 && $1 != \"nobody\" { print $1; exit }'\'' /etc/passwd || true)\"\nif command -v apt-get >/dev/null 2>&1; then export DEBIAN_FRONTEND=noninteractive; apt-get update || true; apt-get install -y sudo || true; fi\nif [ -n \"$PRIMARY_USER\" ]; then usermod -aG sudo \"$PRIMARY_USER\" || true; printf \"%s ALL=(ALL) NOPASSWD:ALL\\n\" \"$PRIMARY_USER\" > /etc/sudoers.d/90-mwc-primary || true; chmod 440 /etc/sudoers.d/90-mwc-primary || true; mkdir -p /etc/lightdm/lightdm.conf.d; printf \"[Seat:*]\\nuser-session=xfce\\ngreeter-session=lightdm-gtk-greeter\\nautologin-user=%s\\nautologin-user-timeout=0\\n\" \"$PRIMARY_USER\" > /etc/lightdm/lightdm.conf.d/51-mwc-autologin.conf || true; fi\nsystemctl set-default graphical.target || true\nsystemctl enable lightdm.service || true\nsystemctl restart lightdm.service || true\nsystemctl disable mwc-firstboot-desktop.service || true\n' > /usr/local/sbin/mwc-firstboot-desktop.sh; chmod +x /usr/local/sbin/mwc-firstboot-desktop.sh" \
+    --run-command "cat > /usr/local/sbin/mwc-firstboot-desktop.sh <<'EOF'
+#!/bin/sh
+set -eu
+PRIMARY_USER=\"\"
+while IFS=: read -r name _ uid _ _ _ _; do
+  [ \"\$name\" = \"nobody\" ] && continue
+  case \"\$uid\" in ''|*[!0-9]*) continue ;; esac
+  [ \"\$uid\" -ge 1000 ] && [ \"\$uid\" -lt 65000 ] || continue
+  PRIMARY_USER=\"\$name\"
+  break
+done < /etc/passwd
+if command -v apt-get >/dev/null 2>&1; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update || true
+  apt-get install -y sudo || true
+fi
+if [ -n \"\$PRIMARY_USER\" ]; then
+  usermod -aG sudo \"\$PRIMARY_USER\" || true
+  printf \"%s ALL=(ALL) NOPASSWD:ALL\\n\" \"\$PRIMARY_USER\" > /etc/sudoers.d/90-mwc-primary || true
+  chmod 440 /etc/sudoers.d/90-mwc-primary || true
+  mkdir -p /etc/lightdm/lightdm.conf.d
+  printf \"[Seat:*]\\nuser-session=xfce\\ngreeter-session=lightdm-gtk-greeter\\nautologin-user=%s\\nautologin-user-timeout=0\\n\" \"\$PRIMARY_USER\" > /etc/lightdm/lightdm.conf.d/51-mwc-autologin.conf || true
+fi
+systemctl set-default graphical.target || true
+systemctl enable lightdm.service || true
+systemctl restart lightdm.service || true
+systemctl disable mwc-firstboot-desktop.service || true
+EOF
+chmod +x /usr/local/sbin/mwc-firstboot-desktop.sh" \
     --run-command "printf '[Unit]\nDescription=Ensure desktop stack starts on first boot\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=oneshot\nExecStart=/usr/local/sbin/mwc-firstboot-desktop.sh\nRemainAfterExit=no\n\n[Install]\nWantedBy=multi-user.target\n' > /etc/systemd/system/mwc-firstboot-desktop.service" \
     --run-command "ln -sf /etc/systemd/system/mwc-firstboot-desktop.service /etc/systemd/system/multi-user.target.wants/mwc-firstboot-desktop.service" \
     --run-command "ln -sf /lib/systemd/system/xrdp.service /etc/systemd/system/multi-user.target.wants/xrdp.service" \
