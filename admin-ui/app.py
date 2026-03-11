@@ -1949,6 +1949,40 @@ def ensure_session_secret() -> str:
 APP.secret_key = ensure_session_secret()
 
 
+@APP.after_request
+def inject_global_footer_and_favicon(response):
+    content_type = response.headers.get("Content-Type", "")
+    if "text/html" not in content_type.lower():
+        return response
+    try:
+        html = response.get_data(as_text=True)
+    except Exception:
+        return response
+    changed = False
+    if "</head>" in html and 'rel="icon"' not in html:
+        favicon_link = '<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">\n'
+        html = html.replace("</head>", f"{favicon_link}</head>", 1)
+        changed = True
+    if "</body>" in html and "mwc-global-footer" not in html and "footer-shell" not in html:
+        year = datetime.utcnow().year
+        footer = (
+            '\n<style id="mwc-global-footer-style">'
+            ".mwc-global-footer{border-top:1px solid rgba(148,163,184,.24);color:#6b7280;background:rgba(255,255,255,.72);padding:.5rem 0;margin-top:1rem}"
+            ".mwc-global-footer .mwc-global-footer-inner{max-width:1320px;margin:0 auto;padding:0 12px;display:flex;gap:.5rem;justify-content:space-between;align-items:center;flex-wrap:wrap;font-size:.85rem}"
+            ".mwc-global-footer a{color:inherit;text-decoration:none}"
+            "</style>\n"
+            f'<footer class="mwc-global-footer"><div class="mwc-global-footer-inner"><div>{APP_VERSION}</div>'
+            f'<div><a href="{COMPANY_URL}" target="_blank" rel="noopener">neumeier.cloud</a> · '
+            f'<a href="{GITHUB_URL}" target="_blank" rel="noopener">GitHub</a> · '
+            f'&copy; {year} {COMPANY_NAME}</div></div></footer>\n'
+        )
+        html = html.replace("</body>", f"{footer}</body>", 1)
+        changed = True
+    if changed:
+        response.set_data(html)
+    return response
+
+
 def load_users():
     ensure_storage()
     try:

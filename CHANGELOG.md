@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.38] - 2026-03-11
+
+### Added
+- Global HTML response hook now injects a compact default footer on pages without an explicit footer template
+- Global HTML response hook now injects favicon link automatically when missing
+
+### Fixed
+- Footer consistency across admin/user/progress views where footer blocks were previously missing
+
 ## [0.6.37] - 2026-03-11
 
 ### Fixed
