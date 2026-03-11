@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows Semantic Versioning.
 
+## [0.6.39] - 2026-03-11
+
+### Fixed
+- Resolved `Working outside of request context` during async Proxmox workspace creation:
+  - Proxmox launch URL builder now falls back to relative path when no Flask request context exists
+- Removed unnecessary Proxmox config payload key `delete=serial0` to avoid noisy task output
+
 ## [0.6.38] - 2026-03-11
 
 ### Added

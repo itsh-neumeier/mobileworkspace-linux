@@ -15,7 +15,7 @@ from urllib.parse import urlencode, urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from flask import Flask, redirect, render_template_string, request, send_from_directory, session, url_for
+from flask import Flask, has_request_context, redirect, render_template_string, request, send_from_directory, session, url_for
 from passlib.hash import bcrypt as passlib_bcrypt
 
 
@@ -2577,7 +2577,9 @@ def proxmox_vm_access_url(vmid: int, node: str) -> str:
 
 
 def proxmox_workspace_access_url(route: str) -> str:
-    return f"{public_scheme()}://{public_host_display()}/pve-launch/{route}/"
+    if has_request_context():
+        return f"{public_scheme()}://{public_host_display()}/pve-launch/{route}/"
+    return f"/pve-launch/{route}/"
 
 
 def proxmox_health_check() -> tuple[bool, str]:
@@ -2782,7 +2784,6 @@ def proxmox_create_vm_for_user(user: dict, progress_hook=None) -> tuple[bool, st
             "ipconfig0": "ip=dhcp",
             "tags": "mobileworkspace",
             "vga": "qxl",
-            "delete": "serial0",
         }
         if disk_override:
             config_payload["scsi0"] = disk_override
